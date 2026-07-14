@@ -54,6 +54,22 @@
 **Priority:** P3
 **Depends on:** Email/notification infrastructure (see Trust Layer TODOs above — no email provider exists in the codebase yet).
 
+## Architecture
+
+### Django + PostgreSQL backend rewrite (preference-driven, needs its own session)
+
+**What:** Replace the Next.js/Prisma/SQLite backend with Django + PostgreSQL. Discussed mid-session on 2026-07-14; deliberately NOT scoped or started here.
+
+**Why:** Stated reason is a language/framework preference for Python/Django, not a technical limitation — SQLite/Prisma were explicitly confirmed not to be the blocker. A real preference, worth taking seriously, but the cost is real too.
+
+**Context:** `/plan-eng-review`'s Step 0 scope challenge on 2026-07-14 found this touches the entire app: 9 Prisma models (`User`, `TeacherProfile`, `Booking`, `Review`, `TeacherCertificate` + verification fields, `TeacherSubject`, `TeacherLanguage`, `TeacherAvailability`, `Subject`), NextAuth v5 credentials auth (just fixed the same day), 3 Stripe API routes, and — depending on whether the frontend is kept as an API client or also rewritten — up to 9 Next.js pages plus the design system (`DESIGN.md`) and trust-layer verification feature built the same day. Estimated multi-day effort, not something to improvise inside another session's context.
+
+Before starting, a dedicated session should decide: (1) keep the Next.js frontend and make Django/DRF an API-only backend, or rewrite the frontend too; (2) migration path for existing data (none yet — zero real users, so this is low-stakes right now); (3) whether this blocks or runs parallel to the other TODOs above (forgot-password, trust-layer admin queue) since those assume the current stack.
+
+**Effort:** XL
+**Priority:** P2 (real preference, but no technical urgency)
+**Depends on:** A dedicated `/office-hours` or `/plan-eng-review` session scoping the actual migration plan — do not start ad hoc.
+
 ## Completed
 
 ### Fix middleware.ts auth check — dashboards are effectively unauthenticated
