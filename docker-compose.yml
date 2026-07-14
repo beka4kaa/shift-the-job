@@ -1,7 +1,6 @@
 # Django + PostgreSQL backend. The Next.js frontend (this repo's root app)
-# is not containerized yet — it still runs directly on the host via `npm run dev`
-# and currently talks to Prisma/SQLite directly, not this API. See
-# backend/README.md and TODOS.md for the cutover plan.
+# is not containerized yet — it still runs directly on the host via `npm run dev`,
+# talking to this API over HTTP (see backend/README.md).
 services:
   db:
     image: postgres:16-alpine

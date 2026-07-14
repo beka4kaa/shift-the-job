@@ -35,7 +35,7 @@ yarn-error.log*
 !.env.example
 !*/.env.example
 
-# local sqlite dev databases (regenerate with `prisma db push` + `npm run seed`)
+# local sqlite dev databases (Django's local fallback db — see backend/README.md)
 *.db
 *.db-journal
 
@@ -46,5 +46,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/prisma
 .gstack/

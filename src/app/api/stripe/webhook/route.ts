@@ -1,40 +1,26 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
-import { prisma } from '@/lib/prisma';
+import { DJANGO_API_URL } from '@/lib/django-api';
 
+/**
+ * Thin proxy to the Django backend's /api/stripe/webhook/ — signature
+ * verification and booking confirmation now live there. Forwards the raw
+ * body unchanged so Django's signature check (over the exact payload bytes
+ * Stripe signed) still matches.
+ */
 export async function POST(req: Request) {
   const body = await req.text();
-  const signature = (await headers()).get('Stripe-Signature') as string;
+  const signature = (await headers()).get('Stripe-Signature') || '';
 
-  let event;
+  const res = await fetch(`${DJANGO_API_URL}/api/stripe/webhook/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Stripe-Signature': signature,
+    },
+    body,
+  });
 
-  try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET as string
-    );
-  } catch (error: any) {
-    return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as any;
-
-    if (session?.metadata?.bookingId) {
-      await prisma.booking.update({
-        where: {
-          id: session.metadata.bookingId,
-        },
-        data: {
-          status: 'CONFIRMED',
-          stripePaymentId: session.payment_intent as string,
-        },
-      });
-      // Optionally: send email confirmation
-    }
-  }
-
-  return new NextResponse('OK', { status: 200 });
+  const text = await res.text();
+  return new NextResponse(text, { status: res.status });
 }

@@ -121,6 +121,14 @@ CORS_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS'
 # that point back at frontend pages instead of this API.
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# Stripe. Neither key has ever been configured with a real value anywhere in
+# this project (the old Next.js src/lib/stripe.ts used a fake 'sk_test_123'
+# fallback) — calls to Stripe's API will fail at their boundary and be caught
+# by the views' existing try/except, same as before this port.
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+PLATFORM_FEE = 0.15  # matches src/lib/constants.ts PLATFORM_FEE
+
 # Django's default logging config swallows INFO from app loggers (e.g. the
 # password-reset link log in accounts/views.py) unless explicitly enabled.
 LOGGING = {

@@ -6,7 +6,7 @@
 
 **What:** Build the admin review queue UI, middleware role-gate on `/dashboard/admin/*`, verification state machine, and test suite for tutor credential verification — the architecture already reviewed and approved in the 2026-07-13 `/plan-eng-review` pass, deferred when v1 was rescoped to a manual process.
 
-**Why:** A founder manually flipping `verificationStatus` via Prisma Studio doesn't scale past a handful of tutors. Once submissions exceed what's manually trackable, this becomes necessary.
+**Why:** A founder manually flipping `verificationStatus` via Django admin doesn't scale past a handful of tutors. Once submissions exceed what's manually trackable, this becomes necessary.
 
 **Context:** Full spec already exists — see `~/.gstack/projects/youteach2/bekzhan-unknown-design-20260713-195142.md` (Approach B, "Eng Review Outcome" section) and the corresponding eng-review findings: middleware role-gate (Architecture finding 1), server-side URL scheme validation on submission (Architecture finding 3), Vitest test setup for the verification state machine (Test finding 4). Reuse that design as-is rather than re-deriving it — it was already reviewed and resolved.
 
@@ -40,25 +40,21 @@
 **Priority:** P4
 **Depends on:** None
 
-## Architecture
+## Completed
 
-### Port Stripe/booking to Django, then delete Prisma
+### Port Stripe/booking to Django, delete Prisma entirely
 
-**What:** Frontend auth (login/register/session), teacher-profile data, and forgot/reset-password all now run through the Django backend — the only piece still on Prisma is Stripe checkout/connect/webhook (`src/app/api/stripe/*`, `src/lib/stripe.ts`) and its underlying `Booking`/`Review` writes.
+**What:** Ported the last Prisma-backed slice — Stripe checkout/connect/webhook and the `Booking` writes behind them — to Django, then removed Prisma from the codebase completely.
 
-**Why:** Same cutover effort as the rest of the Django migration (see Completed below) — Stripe was deliberately deferred rather than ported in the same pass, to keep that change reviewable on its own (payment code deserves its own focused pass, not a footnote on an auth rewrite).
+- `backend/tutoring/stripe_views.py` (new): `StripeCheckoutView` creates the `Booking` row and Stripe Checkout Session (with Connect `transfer_data` when the teacher has a linked Stripe account); `StripeConnectView` handles Express onboarding; `StripeWebhookView` verifies the signature and confirms the booking on `checkout.session.completed`. Same logic/error handling as the old Next.js routes, now backed by Django's ORM. Covered by new tests in `backend/tutoring/tests.py` (mocked Stripe calls) — 42 Django tests passing.
+- `src/app/api/stripe/{checkout,connect,webhook}/route.ts`: converted to thin proxies that forward the caller's `djangoAccessToken` (webhook proxy forwards the raw body + `Stripe-Signature` header unchanged, no auth, so Django's signature check still matches the exact bytes Stripe signed).
+- `src/app/[locale]/booking/[teacherId]/page.tsx`: was still reading exclusively from `mockTeachers`, unlike every other rewired page — converted to a server component using `resolveTeacherProfile()` (same pattern as the teacher-profile page), with the interactive form split out to `BookingForm.tsx`. Real Django teachers now resolve correctly; ids with no Django match still fall back to mock data.
+- Deleted: `prisma/` (schema, seed script, dev.db), root `dev.db`, `src/lib/prisma.ts`, `src/lib/stripe.ts` (no longer had consumers). Removed `@prisma/client`, `prisma`, `@auth/prisma-adapter` from `package.json`, plus `bcryptjs` and the Node `stripe`/`@stripe/stripe-js` packages (all had zero remaining references once auth and payments moved server-side into Django). Dropped the now-dead `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` entries from `.env`/`.env.example`.
 
-**Remaining work:**
-1. Port `POST /api/stripe/checkout` and `/connect` to Django views (create `Booking` rows via Django's ORM, matching `tutoring.serializers.BookingSerializer`'s price/platform_fee computation already in place).
-2. Port the Stripe webhook handler (`src/app/api/stripe/webhook/route.ts`) to a Django view — needs Stripe's Python SDK and the same signature verification.
-3. Once bookings/reviews/checkout all run through Django: delete `prisma/`, `@prisma/client` + `prisma` from `package.json`, `src/lib/prisma.ts`, and the local `dev.db`/`prisma/dev.db` files.
-4. Trust-layer admin-queue TODO above should target Django's `TeacherCertificate` model (already exists there) once picked up — not Prisma.
+**Verified end-to-end:** booking page for a real Django teacher id renders that teacher's actual name/rate/subjects (confirmed live, not mock data); an expired/invalid session token is correctly forwarded by the proxy and rejected by Django (401, matching Django's real DRF error rather than a proxy-level stub); a valid token reaches Django's checkout view, creates a `Booking` row with server-computed `price`/`platform_fee` matching the teacher's hourly rate, and fails only at Stripe's real API call (expected — no real Stripe key has ever been configured in this project, same as the original Next.js implementation). Zero remaining Prisma references outside `git grep`-confirmed docs/comments cleanup.
 
 **Effort:** M
-**Priority:** P1 (last remaining piece of an in-progress migration — don't let it stall half-migrated)
-**Depends on:** None — unblocked, ready to continue.
-
-## Completed
+**Completed:** 2026-07-14
 
 ### Django backend built and wired to the frontend (auth, teacher data, password reset)
 
