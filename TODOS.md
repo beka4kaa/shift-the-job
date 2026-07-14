@@ -40,20 +40,6 @@
 **Priority:** P4
 **Depends on:** None
 
-## Security
-
-### Broken /auth/forgot-password link
-
-**What:** The login page (`src/app/[locale]/auth/login/page.tsx`) links to `/auth/forgot-password`, which has no corresponding route anywhere in the app — a 404 for any real user who clicks it.
-
-**Why:** Dead end in the auth flow. Was already broken before this session; just noticed while redesigning the login page's visuals.
-
-**Context:** Needs a real forgot-password flow (email send + reset token + reset form), not just a placeholder page.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** Email/notification infrastructure (see Trust Layer TODOs above — no email provider exists in the codebase yet).
-
 ## Architecture
 
 ### Django + PostgreSQL backend rewrite (preference-driven, needs its own session)
@@ -71,6 +57,18 @@ Before starting, a dedicated session should decide: (1) keep the Next.js fronten
 **Depends on:** A dedicated `/office-hours` or `/plan-eng-review` session scoping the actual migration plan — do not start ad hoc.
 
 ## Completed
+
+### Broken /auth/forgot-password link
+
+**What:** The login page linked to `/auth/forgot-password`, which had no corresponding route — a 404 for any real user who clicked it.
+
+**Fix:** Built the full flow: `PasswordResetToken` Prisma model (SHA-256-hashed token, 1-hour expiry, single-use), `POST /api/auth/forgot-password` (generic response regardless of whether the email exists, to prevent enumeration), `POST /api/auth/reset-password` (validates token, updates bcrypt password hash, marks token used), and both pages (`/auth/forgot-password`, `/auth/reset-password`) matching the design system. Reset link is logged server-side (`console.log`) instead of emailed — no email provider is configured yet; swap that one line for real delivery once one is chosen.
+
+**Verified:** enumeration protection (same response for real/fake email), invalid token rejected, short password rejected, successful reset, token single-use enforced (reuse rejected), full UI click-through (fill form → submit → success state), 10 new Vitest tests for the token logic (23 total passing), clean production build.
+
+**Effort:** M
+**Priority:** P3
+**Completed:** 2026-07-14
 
 ### Fix middleware.ts auth check — dashboards are effectively unauthenticated
 

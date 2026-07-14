@@ -8,16 +8,27 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  name           String
-  email          String          @unique
-  password       String?
-  image          String?
-  role           String          @default("STUDENT") // STUDENT, TEACHER, ADMIN
-  teacherProfile TeacherProfile?
-  bookings       Booking[]
-  reviews        Review[]
-  createdAt      DateTime        @default(now())
+  id                  String                @id @default(cuid())
+  name                String
+  email               String                @unique
+  password            String?
+  image               String?
+  role                String                @default("STUDENT") // STUDENT, TEACHER, ADMIN
+  teacherProfile      TeacherProfile?
+  bookings            Booking[]
+  reviews             Review[]
+  passwordResetTokens PasswordResetToken[]
+  createdAt           DateTime              @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique // SHA-256 of the raw token; the raw token is never stored
+  expiresAt DateTime
+  usedAt    DateTime? // single-use: null until consumed
+  createdAt DateTime  @default(now())
 }
 
 model TeacherProfile {
