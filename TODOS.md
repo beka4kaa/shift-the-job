@@ -26,4 +26,44 @@
 **Priority:** P3
 **Depends on:** v1 proving the badge changes parent behavior at all (the entire point of shipping the rescoped v1 first).
 
+## Design
+
+### Delete unused dead-code components on the old theme
+
+**What:** Delete `src/components/ui/Button.tsx`, `src/components/ui/Input.tsx`, and `src/components/StatsCounter.tsx` — all three are still on the old purple/navy palette and none are imported anywhere in the app.
+
+**Why:** Confirmed via grep that zero files import any of the three. They don't affect what users see today, but they're stale: a future dev could pick one up assuming it's current, silently reintroducing the old theme.
+
+**Context:** Found during the 2026-07-14 `/design-review` pass that converted every rendered page from the old purple/navy theme to the cream/warm-black system (see `DESIGN.md`). These three were the only remaining old-theme hits in the codebase after that pass, and all three are dead code.
+
+**Effort:** S
+**Priority:** P4
+**Depends on:** None
+
+## Security
+
+### Fix middleware.ts auth check — dashboards are effectively unauthenticated
+
+**What:** `src/middleware.ts` uses `!!req.auth` to decide `isLoggedIn`, but this reads `true` even with zero session cookies present — confirmed via `$B cookies` (empty cookie jar) while `/auth/login` still auto-redirected to `/dashboard/student`, and `/dashboard/teacher` loaded directly with no redirect to login.
+
+**Why:** This means `/dashboard/*` routes are not actually gated by authentication right now. Once real users and real bookings/payments exist, this is a real access-control gap, not just a cosmetic issue.
+
+**Context:** Discovered while testing the redesigned auth pages in the 2026-07-14 `/design-review` session. Likely a next-auth v5 beta interaction with this Next.js 16 setup — needs investigation into what `req.auth` actually resolves to here before fixing. Out of scope for a visual-only pass.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Broken /auth/forgot-password link
+
+**What:** The login page (`src/app/[locale]/auth/login/page.tsx`) links to `/auth/forgot-password`, which has no corresponding route anywhere in the app — a 404 for any real user who clicks it.
+
+**Why:** Dead end in the auth flow. Was already broken before this session; just noticed while redesigning the login page's visuals.
+
+**Context:** Needs a real forgot-password flow (email send + reset token + reset form), not just a placeholder page.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** Email/notification infrastructure (see Trust Layer TODOs above — no email provider exists in the codebase yet).
+
 ## Completed
