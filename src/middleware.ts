@@ -7,7 +7,11 @@ const intlMiddleware = createMiddleware({
 });
 
 export default auth((req) => {
-  const isLoggedIn = !!req.auth;
+  // `req.auth` is truthy even on an Auth.js config error (e.g. missing
+  // AUTH_SECRET) — it's set to an error-shaped object, not null. Check for
+  // an actual session user so a config error can never be mistaken for a
+  // logged-in session.
+  const isLoggedIn = !!req.auth?.user;
   const { pathname } = req.nextUrl;
 
   // We want to skip auth checks for public routes, but still run next-intl
