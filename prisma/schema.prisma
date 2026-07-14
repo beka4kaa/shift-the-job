@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  password       String?
+  image          String?
+  role           String          @default("STUDENT") // STUDENT, TEACHER, ADMIN
+  teacherProfile TeacherProfile?
+  bookings       Booking[]
+  reviews        Review[]
+  createdAt      DateTime        @default(now())
+}
+
+model TeacherProfile {
+  id              String                @id @default(cuid())
+  userId          String                @unique
+  user            User                  @relation(fields: [userId], references: [id])
+  headline        String
+  bio             String
+  hourlyRate      Float
+  currency        String                @default("USD")
+  experience      Int
+  country         String
+  city            String
+  timezone        String                @default("UTC")
+  rating          Float                 @default(0)
+  reviewCount     Int                   @default(0)
+  totalStudents   Int                   @default(0)
+  stripeAccountId String?
+  verified        Boolean               @default(false)
+  featured        Boolean               @default(false)
+  bookings        Booking[]
+  reviews         Review[]
+  createdAt       DateTime              @default(now())
+  
+  // Relations for SQLite compatibility
+  subjects        TeacherSubject[]
+  languages       TeacherLanguage[]
+  certificates    TeacherCertificate[]
+  availabilities  TeacherAvailability[]
+}
+
+model TeacherSubject {
+  id               String         @id @default(cuid())
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id])
+  name             String
+}
+
+model TeacherLanguage {
+  id               String         @id @default(cuid())
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id])
+  code             String
+}
+
+model TeacherCertificate {
+  id                 String         @id @default(cuid())
+  teacherProfileId   String
+  teacherProfile     TeacherProfile @relation(fields: [teacherProfileId], references: [id])
+  url                String
+  verificationStatus String         @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedAt         DateTime? // set when an admin moves the cert to VERIFIED
+  reviewedBy         String? // User.id of the admin who last reviewed this cert
+  adminNote          String? // optional reviewer note (why rejected/revoked)
+}
+
+model TeacherAvailability {
+  id               String         @id @default(cuid())
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id])
+  dayOfWeek        Int
+  startTime        String
+  endTime          String
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  category  String
+  icon      String?
+}
+
+model Booking {
+  id              String         @id @default(cuid())
+  studentId       String
+  student         User           @relation(fields: [studentId], references: [id])
+  teacherId       String
+  teacher         TeacherProfile @relation(fields: [teacherId], references: [id])
+  subject         String
+  date            DateTime
+  duration        Int
+  price           Float
+  platformFee     Float
+  currency        String
+  status          String         @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED, REFUNDED
+  stripePaymentId String?
+  meetingLink     String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+}
+
+model Review {
+  id         String         @id @default(cuid())
+  studentId  String
+  student    User           @relation(fields: [studentId], references: [id])
+  teacherId  String
+  teacher    TeacherProfile @relation(fields: [teacherId], references: [id])
+  rating     Int
+  comment    String
+  createdAt  DateTime       @default(now())
+}
