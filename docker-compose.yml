@@ -1,0 +1,40 @@
+# Django + PostgreSQL backend. The Next.js frontend (this repo's root app)
+# is not containerized yet — it still runs directly on the host via `npm run dev`
+# and currently talks to Prisma/SQLite directly, not this API. See
+# backend/README.md and TODOS.md for the cutover plan.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: youteach
+      POSTGRES_PASSWORD: youteach
+      POSTGRES_DB: youteach
+    volumes:
+      - youteach_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U youteach"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://youteach:youteach@db:5432/youteach
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - youteach_static:/app/staticfiles
+
+volumes:
+  youteach_postgres_data:
+  youteach_static:
