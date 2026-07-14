@@ -42,19 +42,23 @@
 
 ## Architecture
 
-### Django + PostgreSQL backend rewrite (preference-driven, needs its own session)
+### Django backend built — frontend cutover + Prisma removal still pending
 
-**What:** Replace the Next.js/Prisma/SQLite backend with Django + PostgreSQL. Discussed mid-session on 2026-07-14; deliberately NOT scoped or started here.
+**What:** `backend/` now has a working Django + DRF + PostgreSQL backend (accounts app: JWT auth, password reset; tutoring app: TeacherProfile/Booking/Review/etc., mirroring `prisma/schema.prisma`). It is dockerized (`backend/Dockerfile`, root `docker-compose.yml`) and covered by 30 passing tests. **It is not wired to the frontend yet.** The Next.js app still reads/writes via Prisma directly (see `src/lib/teacher-profile.ts`, `src/auth.ts`, all `src/app/api/*` routes).
 
-**Why:** Stated reason is a language/framework preference for Python/Django, not a technical limitation — SQLite/Prisma were explicitly confirmed not to be the blocker. A real preference, worth taking seriously, but the cost is real too.
+**Why:** Started 2026-07-14 as a preference-driven rewrite (Python/Django over Next.js/Prisma, not a technical blocker) — originally deferred to "a dedicated session" via `/plan-eng-review`, then the user overrode that deferral the same session and asked for it immediately. Backend was built first (safer sequencing) rather than deleting Prisma immediately, which would have left the app broken with no replacement.
 
-**Context:** `/plan-eng-review`'s Step 0 scope challenge on 2026-07-14 found this touches the entire app: 9 Prisma models (`User`, `TeacherProfile`, `Booking`, `Review`, `TeacherCertificate` + verification fields, `TeacherSubject`, `TeacherLanguage`, `TeacherAvailability`, `Subject`), NextAuth v5 credentials auth (just fixed the same day), 3 Stripe API routes, and — depending on whether the frontend is kept as an API client or also rewritten — up to 9 Next.js pages plus the design system (`DESIGN.md`) and trust-layer verification feature built the same day. Estimated multi-day effort, not something to improvise inside another session's context.
+**Remaining work before Prisma can actually be deleted:**
+1. Rewire `src/lib/teacher-profile.ts` (and the teacher profile page's direct Prisma calls) to fetch from the Django API (`http://localhost:8000/api/teachers/`) instead.
+2. Replace `src/auth.ts` (NextAuth + PrismaAdapter) with calls to Django's JWT endpoints (`/api/auth/login/`, `/api/auth/register/`, `/api/auth/me/`), and update `src/middleware.ts` accordingly.
+3. Replace the Next.js `/api/auth/forgot-password` and `/api/auth/reset-password` routes with calls to the Django equivalents (or delete them and point the frontend pages directly at Django).
+4. Port Stripe integration (`src/app/api/stripe/*`, `src/lib/stripe.ts`) to Django — not started; only the Next.js version currently works.
+5. Trust-layer verification fields already exist in Django's `TeacherCertificate` model — the admin-queue TODO above should target Django, not Prisma, once picked up.
+6. Only after 1-4 work end-to-end: delete `prisma/`, `@prisma/client`, `prisma` from `package.json`, `src/lib/prisma.ts`, and the `dev.db`/`prisma/dev.db` files.
 
-Before starting, a dedicated session should decide: (1) keep the Next.js frontend and make Django/DRF an API-only backend, or rewrite the frontend too; (2) migration path for existing data (none yet — zero real users, so this is low-stakes right now); (3) whether this blocks or runs parallel to the other TODOs above (forgot-password, trust-layer admin queue) since those assume the current stack.
-
-**Effort:** XL
-**Priority:** P2 (real preference, but no technical urgency)
-**Depends on:** A dedicated `/office-hours` or `/plan-eng-review` session scoping the actual migration plan — do not start ad hoc.
+**Effort:** L (remaining) — the backend itself (the XL part) is done.
+**Priority:** P1 (in progress, don't let it stall half-migrated)
+**Depends on:** None — unblocked, ready to continue.
 
 ## Completed
 
