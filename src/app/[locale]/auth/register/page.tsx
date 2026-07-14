@@ -24,38 +24,35 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4 py-12">
-      <div className="max-w-md w-full bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-2xl">
+    <div className="min-h-screen bg-[#f4f1e9] flex items-center justify-center p-4 py-12 pt-32">
+      <div className="max-w-md w-full border border-black/10 p-8">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-1 mb-6">
-            <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">
-              You
-            </span>
-            <span className="text-2xl font-bold text-white">Teach</span>
+          <Link href="/" className="inline-flex items-center gap-1 mb-6 text-xl font-semibold tracking-[-0.05em] text-[#171813]">
+            YouTeach<span className="text-[#91a838]">.</span>
           </Link>
-          <h1 className="text-2xl font-bold text-white">Create an account</h1>
-          <p className="text-gray-400 mt-2">Join our community today</p>
+          <h1 className="text-2xl font-medium tracking-[-0.02em]">Create an account</h1>
+          <p className="text-black/55 mt-2">Join our community today</p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg mb-6 text-sm text-center">
+          <div className="border border-red-600/30 text-red-700 p-3 mb-6 text-sm text-center">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-black/60 mb-1">
               I want to
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-px bg-black/10">
               <button
                 type="button"
                 onClick={() => setRole('STUDENT')}
-                className={`py-2 px-4 rounded-xl border text-sm font-medium transition-colors ${
+                className={`py-2 px-4 text-sm font-medium transition-colors ${
                   role === 'STUDENT'
-                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                    ? 'bg-[#171813] text-white'
+                    : 'bg-[#f4f1e9] text-black/55 hover:text-black'
                 }`}
               >
                 Learn
@@ -63,10 +60,10 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setRole('TEACHER')}
-                className={`py-2 px-4 rounded-xl border text-sm font-medium transition-colors ${
+                className={`py-2 px-4 text-sm font-medium transition-colors ${
                   role === 'TEACHER'
-                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                    ? 'bg-[#171813] text-white'
+                    : 'bg-[#f4f1e9] text-black/55 hover:text-black'
                 }`}
               >
                 Teach
@@ -75,7 +72,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-black/60 mb-1">
               Full Name
             </label>
             <input
@@ -83,13 +80,13 @@ export default function RegisterPage() {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-transparent border border-black/15 px-4 py-3 placeholder:text-black/35 focus:outline-none focus:border-black/40"
               placeholder="John Doe"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-black/60 mb-1">
               Email
             </label>
             <input
@@ -97,13 +94,13 @@ export default function RegisterPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-transparent border border-black/15 px-4 py-3 placeholder:text-black/35 focus:outline-none focus:border-black/40"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-black/60 mb-1">
               Password
             </label>
             <input
@@ -111,22 +108,22 @@ export default function RegisterPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-transparent border border-black/15 px-4 py-3 placeholder:text-black/35 focus:outline-none focus:border-black/40"
               placeholder="••••••••"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:opacity-90 transition-opacity mt-6"
+            className="w-full py-3 bg-[#171813] text-white font-semibold hover:bg-[#91a838] hover:text-black transition-colors mt-6"
           >
             Create Account
           </button>
         </form>
 
-        <div className="mt-8 text-center text-sm text-gray-400">
+        <div className="mt-8 text-center text-sm text-black/55">
           Already have an account?{' '}
-          <Link href="/auth/login" className="text-purple-400 hover:text-purple-300 font-medium">
+          <Link href="/auth/login" className="font-medium underline decoration-1 underline-offset-4 text-black hover:text-[#91a838]">
             Sign in
           </Link>
         </div>
