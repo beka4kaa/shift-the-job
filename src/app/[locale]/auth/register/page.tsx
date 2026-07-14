@@ -1,25 +1,51 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { PUBLIC_DJANGO_API_URL } from '@/lib/django-api';
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'STUDENT' | 'TEACHER'>('STUDENT');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      // In a real app, you would call your API route to register the user
-      console.log('Registering with', name, email, password, role);
-      // const res = await fetch('/api/auth/register', { ... })
-    } catch (err) {
-      setError('Something went wrong');
+      const res = await fetch(`${PUBLIC_DJANGO_API_URL}/api/auth/register/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const firstError = body && typeof body === 'object' ? Object.values(body)[0] : null;
+        setError(Array.isArray(firstError) ? firstError[0] : 'Registration failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      const result = await signIn('credentials', { email, password, redirect: false });
+      if (result?.error) {
+        // Account was created but auto-login failed — send them to log in manually.
+        router.push('/auth/login');
+        return;
+      }
+
+      router.push(role === 'TEACHER' ? '/dashboard/teacher' : '/dashboard/student');
+    } catch {
+      setError('Something went wrong. Please try again.');
+      setLoading(false);
     }
   };
 
@@ -106,6 +132,7 @@ export default function RegisterPage() {
             <input
               type="password"
               required
+              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-transparent border border-black/15 px-4 py-3 placeholder:text-black/35 focus:outline-none focus:border-black/40"
@@ -115,9 +142,10 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-[#171813] text-white font-semibold hover:bg-[#91a838] hover:text-black transition-colors mt-6"
+            disabled={loading}
+            className="w-full py-3 bg-[#171813] text-white font-semibold hover:bg-[#91a838] hover:text-black transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Account
+            {loading ? 'Creating account…' : 'Create Account'}
           </button>
         </form>
 

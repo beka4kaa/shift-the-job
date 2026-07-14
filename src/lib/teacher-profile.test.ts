@@ -1,105 +1,80 @@
 import { describe, it, expect } from 'vitest';
 import {
-  certificatesAreVerified,
-  teacherRowToProfileView,
+  djangoTeacherToProfileView,
   mockToProfileView,
-  type TeacherRow,
+  type DjangoTeacherRow,
 } from './teacher-profile';
 import type { MockTeacher, MockReview } from './mock-data';
 
-function buildRow(overrides: Partial<TeacherRow> = {}): TeacherRow {
+function buildRow(overrides: Partial<DjangoTeacherRow> = {}): DjangoTeacherRow {
   return {
-    id: 't1',
+    id: 1,
+    name: 'Aigerim',
+    image: null,
     headline: 'Math Tutor',
     bio: 'Bio',
-    hourlyRate: 25,
+    subjects: ['Mathematics', 'Algebra'],
+    languages: ['English'],
+    hourly_rate: 25,
     currency: 'USD',
     experience: 10,
     country: 'Kazakhstan',
     city: 'Almaty',
     rating: 4.9,
-    reviewCount: 3,
-    totalStudents: 120,
-    user: { name: 'Aigerim', image: null },
-    certificates: [],
-    subjects: [{ name: 'Mathematics' }, { name: 'Algebra' }],
-    languages: [{ code: 'English' }],
-    availabilities: [{ dayOfWeek: 0 }, { dayOfWeek: 4 }],
+    review_count: 3,
+    total_students: 120,
+    is_verified: false,
+    availability: ['Mon', 'Fri'],
     reviews: [],
     ...overrides,
   };
 }
 
-describe('certificatesAreVerified', () => {
-  it('is false for an empty certificate list', () => {
-    expect(certificatesAreVerified([])).toBe(false);
+describe('djangoTeacherToProfileView', () => {
+  it('passes through is_verified from the Django API as-is', () => {
+    expect(djangoTeacherToProfileView(buildRow({ is_verified: true })).isVerified).toBe(true);
+    expect(djangoTeacherToProfileView(buildRow({ is_verified: false })).isVerified).toBe(false);
   });
 
-  it('is false when every certificate is PENDING or REJECTED', () => {
-    expect(
-      certificatesAreVerified([
-        { verificationStatus: 'PENDING' },
-        { verificationStatus: 'REJECTED' },
-      ]),
-    ).toBe(false);
-  });
-
-  it('is true when at least one certificate is VERIFIED', () => {
-    expect(
-      certificatesAreVerified([
-        { verificationStatus: 'PENDING' },
-        { verificationStatus: 'VERIFIED' },
-      ]),
-    ).toBe(true);
-  });
-});
-
-describe('teacherRowToProfileView', () => {
-  it('marks the profile verified when a certificate is VERIFIED', () => {
-    const view = teacherRowToProfileView(
-      buildRow({ certificates: [{ verificationStatus: 'VERIFIED' }] }),
-    );
-    expect(view.isVerified).toBe(true);
+  it('tags the source as db and stringifies the numeric id', () => {
+    const view = djangoTeacherToProfileView(buildRow({ id: 42 }));
     expect(view.source).toBe('db');
+    expect(view.id).toBe('42');
   });
 
-  it('marks the profile not verified when no certificate is VERIFIED', () => {
-    const view = teacherRowToProfileView(
-      buildRow({ certificates: [{ verificationStatus: 'PENDING' }] }),
-    );
-    expect(view.isVerified).toBe(false);
-  });
-
-  it('falls back to a default avatar when the user has no image', () => {
-    const view = teacherRowToProfileView(buildRow({ user: { name: 'A', image: null } }));
+  it('falls back to a default avatar when image is null', () => {
+    const view = djangoTeacherToProfileView(buildRow({ image: null }));
     expect(view.image).toContain('dicebear');
   });
 
-  it('maps dayOfWeek to day labels and drops out-of-range days', () => {
-    const view = teacherRowToProfileView(
-      buildRow({ availabilities: [{ dayOfWeek: 0 }, { dayOfWeek: 4 }, { dayOfWeek: 99 }] }),
+  it('passes subjects, languages, and availability through as plain string arrays', () => {
+    const view = djangoTeacherToProfileView(
+      buildRow({ subjects: ['Mathematics'], languages: ['English', 'Russian'], availability: ['Mon', 'Fri'] }),
     );
+    expect(view.subjects).toEqual(['Mathematics']);
+    expect(view.languages).toEqual(['English', 'Russian']);
     expect(view.availability).toEqual(['Mon', 'Fri']);
   });
 
   it('maps reviews and fills subject from the primary subject', () => {
-    const view = teacherRowToProfileView(
+    const view = djangoTeacherToProfileView(
       buildRow({
-        subjects: [{ name: 'Mathematics' }],
+        subjects: ['Mathematics'],
         reviews: [
           {
-            id: 'r1',
+            id: 7,
             rating: 5,
             comment: 'Great',
-            createdAt: new Date('2026-01-02T00:00:00Z'),
-            student: { name: 'Sam', image: null },
+            created_at: '2026-01-02T00:00:00Z',
+            student_name: 'Sam',
+            student_image: null,
           },
         ],
       }),
     );
     expect(view.reviews).toHaveLength(1);
     expect(view.reviews[0]).toMatchObject({
-      id: 'r1',
+      id: '7',
       studentName: 'Sam',
       subject: 'Mathematics',
     });

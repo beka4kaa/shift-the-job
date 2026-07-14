@@ -42,33 +42,51 @@
 
 ## Architecture
 
-### Django backend built — frontend cutover + Prisma removal still pending
+### Port Stripe/booking to Django, then delete Prisma
 
-**What:** `backend/` now has a working Django + DRF + PostgreSQL backend (accounts app: JWT auth, password reset; tutoring app: TeacherProfile/Booking/Review/etc., mirroring `prisma/schema.prisma`). It is dockerized (`backend/Dockerfile`, root `docker-compose.yml`) and covered by 30 passing tests. **It is not wired to the frontend yet.** The Next.js app still reads/writes via Prisma directly (see `src/lib/teacher-profile.ts`, `src/auth.ts`, all `src/app/api/*` routes).
+**What:** Frontend auth (login/register/session), teacher-profile data, and forgot/reset-password all now run through the Django backend — the only piece still on Prisma is Stripe checkout/connect/webhook (`src/app/api/stripe/*`, `src/lib/stripe.ts`) and its underlying `Booking`/`Review` writes.
 
-**Why:** Started 2026-07-14 as a preference-driven rewrite (Python/Django over Next.js/Prisma, not a technical blocker) — originally deferred to "a dedicated session" via `/plan-eng-review`, then the user overrode that deferral the same session and asked for it immediately. Backend was built first (safer sequencing) rather than deleting Prisma immediately, which would have left the app broken with no replacement.
+**Why:** Same cutover effort as the rest of the Django migration (see Completed below) — Stripe was deliberately deferred rather than ported in the same pass, to keep that change reviewable on its own (payment code deserves its own focused pass, not a footnote on an auth rewrite).
 
-**Remaining work before Prisma can actually be deleted:**
-1. Rewire `src/lib/teacher-profile.ts` (and the teacher profile page's direct Prisma calls) to fetch from the Django API (`http://localhost:8000/api/teachers/`) instead.
-2. Replace `src/auth.ts` (NextAuth + PrismaAdapter) with calls to Django's JWT endpoints (`/api/auth/login/`, `/api/auth/register/`, `/api/auth/me/`), and update `src/middleware.ts` accordingly.
-3. Replace the Next.js `/api/auth/forgot-password` and `/api/auth/reset-password` routes with calls to the Django equivalents (or delete them and point the frontend pages directly at Django).
-4. Port Stripe integration (`src/app/api/stripe/*`, `src/lib/stripe.ts`) to Django — not started; only the Next.js version currently works.
-5. Trust-layer verification fields already exist in Django's `TeacherCertificate` model — the admin-queue TODO above should target Django, not Prisma, once picked up.
-6. Only after 1-4 work end-to-end: delete `prisma/`, `@prisma/client`, `prisma` from `package.json`, `src/lib/prisma.ts`, and the `dev.db`/`prisma/dev.db` files.
+**Remaining work:**
+1. Port `POST /api/stripe/checkout` and `/connect` to Django views (create `Booking` rows via Django's ORM, matching `tutoring.serializers.BookingSerializer`'s price/platform_fee computation already in place).
+2. Port the Stripe webhook handler (`src/app/api/stripe/webhook/route.ts`) to a Django view — needs Stripe's Python SDK and the same signature verification.
+3. Once bookings/reviews/checkout all run through Django: delete `prisma/`, `@prisma/client` + `prisma` from `package.json`, `src/lib/prisma.ts`, and the local `dev.db`/`prisma/dev.db` files.
+4. Trust-layer admin-queue TODO above should target Django's `TeacherCertificate` model (already exists there) once picked up — not Prisma.
 
-**Effort:** L (remaining) — the backend itself (the XL part) is done.
-**Priority:** P1 (in progress, don't let it stall half-migrated)
+**Effort:** M
+**Priority:** P1 (last remaining piece of an in-progress migration — don't let it stall half-migrated)
 **Depends on:** None — unblocked, ready to continue.
 
 ## Completed
+
+### Django backend built and wired to the frontend (auth, teacher data, password reset)
+
+**What:** Built a full Django + DRF + PostgreSQL backend (`backend/`) mirroring `prisma/schema.prisma` — `accounts` app (custom User, JWT auth, password reset) and `tutoring` app (TeacherProfile/Booking/Review/etc.) — then cut the frontend over to it:
+- `src/auth.ts`: NextAuth's Credentials provider now calls Django's `/api/auth/login/` instead of querying Prisma directly (NextAuth stays as the session/cookie layer; Django is the source of truth for credentials). Session exposes `djangoAccessToken` for future authenticated calls.
+- `src/lib/teacher-profile.ts`: fetches from Django's `/api/teachers/{id}/` instead of Prisma; `isVerified` now computed by Django.
+- Login/register pages wired to real `signIn()`/Django register (previously `console.log` stubs); forgot/reset-password pages point directly at Django, replacing the Prisma-backed Next.js API routes (deleted, along with `src/lib/password-reset.ts`).
+- Added `backend/tutoring/management/commands/seed_demo.py` (mirrors `prisma/seed.mjs`).
+
+**Deliberately NOT ported:** Stripe checkout/connect/webhook and the `Booking`/`Review` writes behind them — see the Architecture TODO above.
+
+**Bugs found and fixed during the cutover:**
+- `eslint.config.mjs`'s `globalIgnores` didn't exclude `backend/` — ESLint was scanning the Python venv and Django's collected static JS assets, inflating lint output from ~7 errors to 3,884 problems.
+- Root `.gitignore`'s blanket `.env*` rule was also silently excluding `.env.example` files (both root and `backend/`), which have no secrets and are meant to be committed.
+- `ReviewSerializer.Meta.fields` omitted `teacher` entirely, so it was silently dropped from POST input, causing a NOT NULL constraint violation on insert (caught via manual curl testing, not by the type system, since DRF doesn't error on unknown-but-absent fields).
+
+**Verified end-to-end** with both servers running: teacher profile page renders real Django data with correct verified badge; register creates a real Django user, auto-signs-in, and redirects by role; login authenticates against Django; forgot-password issues a token and logs the reset link (enumeration-safe); reset-password updates the password and the new password works for login; unauthenticated dashboard access still redirects to login; booking page and Stripe routes (untouched) still work. 30 Django tests + 10 Vitest tests passing, clean production build.
+
+**Effort:** XL
+**Completed:** 2026-07-14
 
 ### Broken /auth/forgot-password link
 
 **What:** The login page linked to `/auth/forgot-password`, which had no corresponding route — a 404 for any real user who clicked it.
 
-**Fix:** Built the full flow: `PasswordResetToken` Prisma model (SHA-256-hashed token, 1-hour expiry, single-use), `POST /api/auth/forgot-password` (generic response regardless of whether the email exists, to prevent enumeration), `POST /api/auth/reset-password` (validates token, updates bcrypt password hash, marks token used), and both pages (`/auth/forgot-password`, `/auth/reset-password`) matching the design system. Reset link is logged server-side (`console.log`) instead of emailed — no email provider is configured yet; swap that one line for real delivery once one is chosen.
+**Fix:** Originally built as a Prisma-backed flow (`PasswordResetToken` model, Next.js API routes) on 2026-07-14, then superseded the same day when the Django cutover (see above) replaced it with the equivalent Django-backed flow — same design (SHA-256-hashed token, 1-hour expiry, single-use, enumeration-safe generic response), just served by Django instead of Next.js API routes.
 
-**Verified:** enumeration protection (same response for real/fake email), invalid token rejected, short password rejected, successful reset, token single-use enforced (reuse rejected), full UI click-through (fill form → submit → success state), 10 new Vitest tests for the token logic (23 total passing), clean production build.
+**Verified:** enumeration protection, invalid/expired/reused token rejection, short-password rejection, successful reset, full UI click-through — verified twice, once against each implementation.
 
 **Effort:** M
 **Priority:** P3

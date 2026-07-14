@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
 
@@ -24,6 +25,16 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    """Adds the user's profile fields to the token response so the frontend
+    (NextAuth) doesn't need a second round-trip to /api/auth/me/ on login."""
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['user'] = UserSerializer(self.user).data
+        return data
 
 
 class ForgotPasswordSerializer(serializers.Serializer):

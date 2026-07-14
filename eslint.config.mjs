@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Django backend (see /backend) is a separate Python project —
+    // its venv and collected static assets are not part of this lint scope.
+    "backend/**",
   ]),
 ]);
 

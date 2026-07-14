@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { PUBLIC_DJANGO_API_URL } from '@/lib/django-api';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -25,14 +26,15 @@ function ResetPasswordForm() {
     setStatus('loading');
 
     try {
-      const res = await fetch('/api/auth/reset-password', {
+      const res = await fetch(`${PUBLIC_DJANGO_API_URL}/api/auth/reset-password/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
       });
 
       if (!res.ok) {
-        setError(await res.text());
+        const body = await res.json().catch(() => null);
+        setError(body?.detail || body?.password?.[0] || 'This reset link is invalid or has expired');
         setStatus('error');
         return;
       }

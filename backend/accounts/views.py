@@ -5,10 +5,12 @@ from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import PasswordResetToken, User
 from .serializers import (
     ForgotPasswordSerializer,
+    LoginSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
     UserSerializer,
@@ -21,6 +23,10 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+
+
+class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
 
 
 class MeView(generics.RetrieveAPIView):

@@ -1,24 +1,31 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    try {
-      // In a real app, you would use signIn('credentials', { ... }) from next-auth/react
-      console.log('Logging in with', email, password);
-      // await signIn('credentials', { email, password, callbackUrl: '/dashboard/student' });
-    } catch (err) {
+    const result = await signIn('credentials', { email, password, redirect: false });
+
+    if (result?.error) {
       setError('Invalid email or password');
+      setLoading(false);
+      return;
     }
+
+    router.push('/dashboard/student');
   };
 
   return (
@@ -74,9 +81,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-[#171813] text-white font-semibold hover:bg-[#91a838] hover:text-black transition-colors mt-6"
+            disabled={loading}
+            className="w-full py-3 bg-[#171813] text-white font-semibold hover:bg-[#91a838] hover:text-black transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sign In
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 

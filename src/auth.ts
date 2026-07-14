@@ -1,11 +1,20 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
+import { DJANGO_API_URL } from '@/lib/django-api';
+
+interface DjangoLoginResponse {
+  access: string;
+  refresh: string;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    image: string | null;
+    role: string;
+  };
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/auth/login',
@@ -22,31 +31,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email as string,
-          },
+        const res = await fetch(`${DJANGO_API_URL}/api/auth/login/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
+          }),
         });
 
-        if (!user || !user.password) {
+        if (!res.ok) {
           return null;
         }
 
-        const passwordsMatch = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
-
-        if (!passwordsMatch) {
-          return null;
-        }
+        const data: DjangoLoginResponse = await res.json();
 
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          image: user.image,
+          id: String(data.user.id),
+          email: data.user.email,
+          name: data.user.name,
+          image: data.user.image,
+          role: data.user.role,
+          djangoAccessToken: data.access,
+          djangoRefreshToken: data.refresh,
         };
       },
     }),
@@ -56,6 +63,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = user.role;
         token.id = user.id;
+        token.djangoAccessToken = user.djangoAccessToken;
+        token.djangoRefreshToken = user.djangoRefreshToken;
       }
       return token;
     },
@@ -64,6 +73,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.id = token.id as string;
       }
+      session.djangoAccessToken = token.djangoAccessToken as string;
       return session;
     },
   },

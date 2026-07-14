@@ -7,11 +7,14 @@ declare module 'next-auth' {
       id: string;
       role: string;
     } & DefaultSession['user'];
+    djangoAccessToken: string;
   }
 
   interface User {
     id: string;
     role: string;
+    djangoAccessToken: string;
+    djangoRefreshToken: string;
   }
 }
 
@@ -19,5 +22,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
+    djangoAccessToken: string;
+    djangoRefreshToken: string;
   }
 }
