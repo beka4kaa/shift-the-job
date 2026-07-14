@@ -26,7 +26,7 @@ export function VerifiedBadge({ verified, className }: VerifiedBadgeProps) {
       title="Verified tutor"
       className={className}
     >
-      <BadgeCheck className="w-6 h-6 text-blue-400" />
+      <BadgeCheck className="w-6 h-6 text-[#91a838]" />
     </span>
   );
 }
