@@ -42,18 +42,6 @@
 
 ## Security
 
-### Fix middleware.ts auth check — dashboards are effectively unauthenticated
-
-**What:** `src/middleware.ts` uses `!!req.auth` to decide `isLoggedIn`, but this reads `true` even with zero session cookies present — confirmed via `$B cookies` (empty cookie jar) while `/auth/login` still auto-redirected to `/dashboard/student`, and `/dashboard/teacher` loaded directly with no redirect to login.
-
-**Why:** This means `/dashboard/*` routes are not actually gated by authentication right now. Once real users and real bookings/payments exist, this is a real access-control gap, not just a cosmetic issue.
-
-**Context:** Discovered while testing the redesigned auth pages in the 2026-07-14 `/design-review` session. Likely a next-auth v5 beta interaction with this Next.js 16 setup — needs investigation into what `req.auth` actually resolves to here before fixing. Out of scope for a visual-only pass.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
-
 ### Broken /auth/forgot-password link
 
 **What:** The login page (`src/app/[locale]/auth/login/page.tsx`) links to `/auth/forgot-password`, which has no corresponding route anywhere in the app — a 404 for any real user who clicks it.
@@ -67,3 +55,17 @@
 **Depends on:** Email/notification infrastructure (see Trust Layer TODOs above — no email provider exists in the codebase yet).
 
 ## Completed
+
+### Fix middleware.ts auth check — dashboards are effectively unauthenticated
+
+**What:** `src/middleware.ts` used `!!req.auth` to decide `isLoggedIn`, but this read `true` even with zero session cookies present.
+
+**Why:** `/dashboard/*` routes were not actually gated by authentication.
+
+**Root cause:** `.env` had `DATABASE_URL` and `AUTH_SECRET` concatenated on one line with no separator, so `AUTH_SECRET` was never actually set. Auth.js threw `MissingSecret`, and its middleware wrapper put that error object into `req.auth` instead of `null` — objects are truthy in JS, so `isLoggedIn` was always `true`.
+
+**Fix:** Split `.env` onto separate lines (local file, gitignored). Hardened `middleware.ts` to check `req.auth?.user` instead of bare `req.auth`, so a future config error can't be mistaken for a logged-in session again. Verified via fresh curl (no cookies): `/dashboard/teacher` now 302s to `/auth/login`.
+
+**Effort:** M
+**Priority:** P1
+**Completed:** 2026-07-14
