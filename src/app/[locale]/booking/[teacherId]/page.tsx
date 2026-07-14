@@ -1,13 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { mockTeachers, type MockTeacher } from '@/lib/mock-data';
 import Link from 'next/link';
 
 export default function BookingPage() {
   const params = useParams();
-  const router = useRouter();
   const teacher = mockTeachers.find((t) => t.id === params.teacherId) as MockTeacher | undefined;
 
   const [date, setDate] = useState('');
@@ -18,8 +17,8 @@ export default function BookingPage() {
 
   if (!teacher) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-[#f1f5f9] flex items-center justify-center">
-        <h1 className="text-2xl font-bold">Teacher not found</h1>
+      <div className="min-h-screen bg-[#f4f1e9] text-[#171813] flex items-center justify-center">
+        <h1 className="text-2xl font-medium tracking-[-0.02em]">Teacher not found</h1>
       </div>
     );
   }
@@ -56,40 +55,40 @@ export default function BookingPage() {
   const amount = (teacher.hourlyRate / 60) * duration;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-[#f1f5f9] flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen bg-[#f4f1e9] text-[#171813] flex items-center justify-center py-12 px-5 pt-32">
       <div className="max-w-xl w-full">
         <Link
           href={`/teachers/${teacher.id}`}
-          className="text-purple-400 hover:text-purple-300 text-sm mb-6 inline-block"
+          className="text-sm font-semibold underline decoration-1 underline-offset-4 mb-6 inline-block"
         >
           ← Back to profile
         </Link>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-          <h1 className="text-2xl font-bold mb-6">Book a session with {teacher.name}</h1>
 
-          <div className="flex items-center gap-4 mb-8 bg-[#0a0a0f] p-4 rounded-xl border border-white/5">
-            <img src={teacher.image} alt={teacher.name} className="w-16 h-16 rounded-full object-cover" />
+        <div className="border border-black/10 p-8">
+          <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Book a session with {teacher.name}</h1>
+
+          <div className="flex items-center gap-4 mb-8 border border-black/10 p-4">
+            <img src={teacher.image} alt={teacher.name} className="w-16 h-16 object-cover" />
             <div>
-              <p className="font-semibold text-white">{teacher.name}</p>
-              <p className="text-sm text-gray-400">{teacher.headline}</p>
-              <p className="text-sm text-purple-400 mt-1">${teacher.hourlyRate}/hr</p>
+              <p className="font-semibold">{teacher.name}</p>
+              <p className="text-sm text-black/55">{teacher.headline}</p>
+              <p className="text-sm text-black/70 mt-1">${teacher.hourlyRate}/hr</p>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-6 text-sm">
+            <div className="border border-red-600/30 text-red-700 p-4 mb-6 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleBooking} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Subject</label>
+              <label className="block text-sm font-medium text-black/60 mb-2">Subject</label>
               <select
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500"
+                className="w-full bg-transparent border border-black/15 px-4 py-3 focus:outline-none focus:border-black/40"
                 required
               >
                 {teacher.subjects.map(sub => (
@@ -99,28 +98,28 @@ export default function BookingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Date & Time</label>
+              <label className="block text-sm font-medium text-black/60 mb-2">Date & Time</label>
               <input
                 type="datetime-local"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500"
+                className="w-full bg-transparent border border-black/15 px-4 py-3 focus:outline-none focus:border-black/40"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Duration</label>
-              <div className="grid grid-cols-3 gap-3">
+              <label className="block text-sm font-medium text-black/60 mb-2">Duration</label>
+              <div className="grid grid-cols-3 gap-px bg-black/10">
                 {[30, 60, 90].map(mins => (
                   <button
                     key={mins}
                     type="button"
                     onClick={() => setDuration(mins)}
-                    className={`py-3 rounded-xl border transition-colors ${
-                      duration === mins 
-                        ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
-                        : 'bg-[#0a0a0f] border-white/10 text-gray-400 hover:border-white/20'
+                    className={`py-3 border transition-colors ${
+                      duration === mins
+                        ? 'bg-[#171813] border-[#171813] text-white'
+                        : 'bg-[#f4f1e9] border-black/15 text-black/60 hover:border-black/30'
                     }`}
                   >
                     {mins} min
@@ -129,18 +128,18 @@ export default function BookingPage() {
               </div>
             </div>
 
-            <div className="border-t border-white/10 pt-6 mt-6">
+            <div className="border-t border-black/10 pt-6 mt-6">
               <div className="flex justify-between items-center mb-6">
-                <span className="text-gray-300">Total Price</span>
-                <span className="text-3xl font-bold text-white">${amount.toFixed(2)}</span>
+                <span className="text-black/60">Total Price</span>
+                <span className="text-3xl font-medium tracking-[-0.02em]">${amount.toFixed(2)}</span>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-[#171813] text-white font-semibold text-lg hover:bg-[#91a838] hover:text-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing...' : 'Proceed to Payment'}
+                {loading ? 'Processing…' : 'Proceed to Payment'}
               </button>
             </div>
           </form>
