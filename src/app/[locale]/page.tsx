@@ -3,10 +3,8 @@ import Image from 'next/image';
 import { ArrowRight, Check, Search, Star } from 'lucide-react';
 import { SubjectCard } from '@/components/SubjectCard';
 import { TeacherCard } from '@/components/TeacherCard';
-import { ReviewCard } from '@/components/ReviewCard';
 import { HowItWorks } from '@/components/HowItWorks';
 import { SUBJECTS } from '@/lib/constants';
-import { mockReviews } from '@/lib/mock-data';
 import { getTeacherList } from '@/lib/teacher-profile';
 
 const quickTags = ['SAT', 'IELTS', 'TOEFL', 'GRE', 'GMAT'];
@@ -153,17 +151,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="border-t border-black/10 px-5 py-20 sm:px-8 lg:py-28">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 grid gap-5 md:grid-cols-2">
-            <h2 className="text-4xl font-medium tracking-[-0.04em] sm:text-5xl">What progress sounds like.</h2>
-            <p className="max-w-md text-sm leading-6 text-black/50 md:justify-self-end">Honest notes from students who found the right person to learn with.</p>
-          </div>
-          <div className="grid grid-cols-1 border-l border-t border-black/10 md:grid-cols-3">
-            {mockReviews.slice(0, 3).map((review) => <ReviewCard key={review.id} review={review} />)}
-          </div>
-        </div>
-      </section>
     </>
   );
 }

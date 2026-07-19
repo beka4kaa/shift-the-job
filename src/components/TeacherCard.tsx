@@ -4,8 +4,8 @@ import { ArrowUpRight, BadgeCheck, Star } from 'lucide-react';
 import { formatPrice, getCountryFlag } from '@/lib/utils';
 
 /**
- * Minimal shape a teacher card needs. `ProfileView` (the uniform Django/mock
- * view) is a superset, so both real and fallback data satisfy it.
+ * Minimal shape a teacher card needs. `ProfileView` (the Django-backed view)
+ * is a superset, so it satisfies this directly.
  */
 export interface TeacherCardData {
   id: string;

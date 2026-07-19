@@ -1,17 +1,25 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { mockBookings } from '@/lib/mock-data';
 import {
   Calendar,
   CheckCircle,
-  Heart,
+  Wallet,
   Clock,
   MessageCircle,
   Settings,
+  Heart,
   LayoutDashboard,
 } from 'lucide-react';
 import Link from 'next/link';
+import {
+  type DashboardBooking,
+  isUpcoming,
+  isPast,
+  formatBookingDate,
+  money,
+} from '@/lib/bookings';
 
 const sidebarItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/student', active: true },
@@ -21,11 +29,67 @@ const sidebarItems = [
   { label: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
 ];
 
+function BookingCard({ booking, kind }: { booking: DashboardBooking; kind: 'upcoming' | 'past' }) {
+  const { date, time } = formatBookingDate(booking.date);
+  return (
+    <div className="bg-[#f4f1e9] border border-black/10 p-6 flex items-center gap-4">
+      {booking.teacher_image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={booking.teacher_image} alt={booking.teacher_name} className="w-12 h-12 object-cover" />
+      ) : (
+        <div className="w-12 h-12 border border-black/10 flex items-center justify-center text-lg font-medium text-black/40">
+          {booking.teacher_name.charAt(0).toUpperCase()}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-semibold">{booking.teacher_name}</span>
+          <span className="border border-black/15 text-black/60 px-2 py-0.5 text-xs">{booking.subject}</span>
+        </div>
+        <div className="flex items-center gap-4 text-sm text-black/55">
+          <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{date}</span>
+          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{time}</span>
+          <span>{booking.duration} min</span>
+          <span>{money(booking.price, booking.currency)}</span>
+        </div>
+      </div>
+      {kind === 'upcoming' ? (
+        <span className="border border-[#91a838]/40 text-[#5f6f26] px-3 py-1 text-xs capitalize">
+          {booking.status.toLowerCase()}
+        </span>
+      ) : (
+        <span className="border border-black/15 text-black/45 px-3 py-1 text-xs capitalize">
+          {booking.status.toLowerCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function StudentDashboardPage() {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
-  const upcomingBookings = mockBookings.filter((b) => b.status === 'upcoming');
-  const completedBookings = mockBookings.filter((b) => b.status === 'completed');
+
+  const [bookings, setBookings] = useState<DashboardBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/bookings', { cache: 'no-store' });
+        if (res.ok) setBookings(await res.json());
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const upcoming = bookings.filter(isUpcoming);
+  const past = bookings.filter(isPast);
+  const completed = bookings.filter((b) => b.status === 'COMPLETED');
+  const totalSpent = bookings
+    .filter((b) => b.status === 'CONFIRMED' || b.status === 'COMPLETED')
+    .reduce((sum, b) => sum + b.price, 0);
 
   return (
     <div className="flex min-h-screen pt-32 bg-[#f4f1e9] text-[#171813]">
@@ -39,9 +103,7 @@ export default function StudentDashboardPage() {
                 key={item.label}
                 href={item.href}
                 className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                  item.active
-                    ? 'bg-[#171813] text-white'
-                    : 'text-black/55 hover:bg-black/5 hover:text-black'
+                  item.active ? 'bg-[#171813] text-white' : 'text-black/55 hover:bg-black/5 hover:text-black'
                 }`}
               >
                 <Icon className="w-5 h-5" />
@@ -54,7 +116,6 @@ export default function StudentDashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 p-8">
-        {/* Welcome */}
         <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
 
         {/* Stats Row */}
@@ -64,122 +125,53 @@ export default function StudentDashboardPage() {
               <Calendar className="w-5 h-5 text-black/45" />
               <span className="text-sm text-black/55">Upcoming Lessons</span>
             </div>
-            <p className="text-3xl font-medium tracking-[-0.02em]">2</p>
+            <p className="text-3xl font-medium tracking-[-0.02em]">{loading ? '—' : upcoming.length}</p>
           </div>
           <div className="border-r border-b border-black/10 p-6">
             <div className="flex items-center gap-3 mb-2">
               <CheckCircle className="w-5 h-5 text-[#91a838]" />
               <span className="text-sm text-black/55">Completed Lessons</span>
             </div>
-            <p className="text-3xl font-medium tracking-[-0.02em]">12</p>
+            <p className="text-3xl font-medium tracking-[-0.02em]">{loading ? '—' : completed.length}</p>
           </div>
           <div className="border-r border-b border-black/10 p-6">
             <div className="flex items-center gap-3 mb-2">
-              <Heart className="w-5 h-5 text-black/45" />
-              <span className="text-sm text-black/55">Favorite Tutors</span>
+              <Wallet className="w-5 h-5 text-black/45" />
+              <span className="text-sm text-black/55">Total Spent</span>
             </div>
-            <p className="text-3xl font-medium tracking-[-0.02em]">5</p>
+            <p className="text-3xl font-medium tracking-[-0.02em]">{loading ? '—' : money(totalSpent, 'USD')}</p>
           </div>
         </div>
 
         {/* Upcoming Lessons */}
         <section className="mb-8">
           <h2 className="text-lg font-medium tracking-[-0.02em] mb-4">
-            Upcoming Lessons{' '}
-            <span className="text-sm text-black/45 font-normal">({upcomingBookings.length})</span>
+            Upcoming Lessons <span className="text-sm text-black/45 font-normal">({upcoming.length})</span>
           </h2>
           <div className="flex flex-col gap-px bg-black/10">
-            {upcomingBookings.map((booking) => (
-              <div
-                key={booking.id}
-                className="bg-[#f4f1e9] border border-black/10 p-6 flex items-center gap-4"
-              >
-                <img
-                  src={booking.teacherImage}
-                  alt={booking.teacherName}
-                  className="w-12 h-12 object-cover"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold">{booking.teacherName}</span>
-                    <span className="border border-black/15 text-black/60 px-2 py-0.5 text-xs">
-                      {booking.subject}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-black/55">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {booking.date}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {booking.time}
-                    </span>
-                    <span>{booking.duration} min</span>
-                    <span>${booking.price}</span>
-                  </div>
-                </div>
-                <span className="border border-[#91a838]/40 text-[#5f6f26] px-3 py-1 text-xs">
-                  Upcoming
-                </span>
-                <button className="bg-[#171813] px-4 py-2 text-sm text-white hover:bg-[#91a838] hover:text-black transition-colors">
-                  Join Lesson
-                </button>
-              </div>
-            ))}
-            {upcomingBookings.length === 0 && (
-              <p className="text-black/45 text-sm bg-[#f4f1e9] p-6">No upcoming lessons scheduled.</p>
+            {upcoming.map((b) => <BookingCard key={b.id} booking={b} kind="upcoming" />)}
+            {!loading && upcoming.length === 0 && (
+              <p className="text-black/45 text-sm bg-[#f4f1e9] p-6">
+                No upcoming lessons.{' '}
+                <Link href="/teachers" className="underline decoration-1 underline-offset-4 text-black">
+                  Find a tutor
+                </Link>{' '}
+                to book your first one.
+              </p>
             )}
+            {loading && <p className="text-black/45 text-sm bg-[#f4f1e9] p-6">Loading your lessons…</p>}
           </div>
         </section>
 
         {/* Past Lessons */}
         <section className="mb-8">
           <h2 className="text-lg font-medium tracking-[-0.02em] mb-4">
-            Past Lessons{' '}
-            <span className="text-sm text-black/45 font-normal">({completedBookings.length})</span>
+            Past Lessons <span className="text-sm text-black/45 font-normal">({past.length})</span>
           </h2>
           <div className="flex flex-col gap-px bg-black/10">
-            {completedBookings.map((booking) => (
-              <div
-                key={booking.id}
-                className="bg-[#f4f1e9] border border-black/10 p-6 flex items-center gap-4"
-              >
-                <img
-                  src={booking.teacherImage}
-                  alt={booking.teacherName}
-                  className="w-12 h-12 object-cover"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold">{booking.teacherName}</span>
-                    <span className="border border-black/15 text-black/60 px-2 py-0.5 text-xs">
-                      {booking.subject}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-black/55">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {booking.date}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {booking.time}
-                    </span>
-                    <span>{booking.duration} min</span>
-                    <span>${booking.price}</span>
-                  </div>
-                </div>
-                <span className="border border-black/15 text-black/45 px-3 py-1 text-xs">
-                  Completed
-                </span>
-                <button className="border border-black/15 px-4 py-2 text-sm text-black/70 hover:border-black/30 hover:text-black transition-colors">
-                  Leave Review
-                </button>
-              </div>
-            ))}
-            {completedBookings.length === 0 && (
-              <p className="text-black/45 text-sm bg-[#f4f1e9] p-6">No completed lessons yet.</p>
+            {past.map((b) => <BookingCard key={b.id} booking={b} kind="past" />)}
+            {!loading && past.length === 0 && (
+              <p className="text-black/45 text-sm bg-[#f4f1e9] p-6">No past lessons yet.</p>
             )}
           </div>
         </section>
@@ -192,9 +184,6 @@ export default function StudentDashboardPage() {
           >
             Find a Tutor
           </Link>
-          <button className="border border-black/15 px-6 py-3 text-sm text-black/70 font-medium hover:border-black/30 hover:text-black transition-colors">
-            My Bookings
-          </button>
         </div>
       </main>
     </div>

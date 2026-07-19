@@ -53,7 +53,12 @@ class BookingViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Booking.objects.filter(student=self.request.user).select_related('teacher__user')
+        base = Booking.objects.select_related('teacher__user', 'student').order_by('date')
+        # `?role=teacher` returns lessons the caller teaches; otherwise the
+        # lessons they booked as a student.
+        if self.request.query_params.get('role') == 'teacher':
+            return base.filter(teacher__user=self.request.user)
+        return base.filter(student=self.request.user)
 
 
 class ReviewViewSet(viewsets.ModelViewSet):

@@ -180,6 +180,47 @@ class BookingAPITests(APITestCase):
         self.assertEqual(len(res.data), 1)
         self.assertEqual(res.data[0]['student'], student_a.id)
 
+    def test_booking_includes_display_names(self):
+        teacher = make_teacher(email='dn@example.com')
+        student = User.objects.create_user(email='dns@example.com', name='Dina', password='pw123456')
+        Booking.objects.create(
+            student=student, teacher=teacher, subject='Mathematics', date='2026-08-01T14:00:00Z',
+            duration=60, price=25, platform_fee=3.75, currency='USD',
+        )
+        self.client.force_authenticate(user=student)
+        res = self.client.get('/api/bookings/')
+        self.assertEqual(res.data[0]['teacher_name'], 'Teacher')
+        self.assertEqual(res.data[0]['student_name'], 'Dina')
+
+    def test_role_teacher_returns_lessons_the_caller_teaches(self):
+        teacher = make_teacher(email='rt@example.com')
+        student = User.objects.create_user(email='rts@example.com', name='Stu', password='pw123456')
+        Booking.objects.create(
+            student=student, teacher=teacher, subject='Mathematics', date='2026-08-01T14:00:00Z',
+            duration=60, price=25, platform_fee=3.75, currency='USD',
+        )
+        # As the teacher, ?role=teacher sees the lesson; default (student view) does not.
+        self.client.force_authenticate(user=teacher.user)
+        as_teacher = self.client.get('/api/bookings/?role=teacher')
+        as_student = self.client.get('/api/bookings/')
+        self.assertEqual(len(as_teacher.data), 1)
+        self.assertEqual(len(as_student.data), 0)
+
+
+class MyTeacherProfileStatsTests(APITestCase):
+    def test_me_endpoint_exposes_readonly_stats_and_reviews(self):
+        teacher = make_teacher(email='st@example.com', rating=4.8, review_count=3, total_students=12)
+        student = User.objects.create_user(email='sts@example.com', name='Rev', password='pw123456')
+        Review.objects.create(student=student, teacher=teacher, rating=5, comment='Great tutor')
+        self.client.force_authenticate(user=teacher.user)
+        res = self.client.get('/api/teachers/me/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['rating'], 4.8)
+        self.assertEqual(res.data['review_count'], 3)
+        self.assertEqual(res.data['total_students'], 12)
+        self.assertEqual(len(res.data['reviews']), 1)
+        self.assertEqual(res.data['reviews'][0]['comment'], 'Great tutor')
+
 
 class ReviewAPITests(APITestCase):
     def test_create_requires_authentication(self):

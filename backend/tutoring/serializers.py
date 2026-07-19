@@ -77,15 +77,19 @@ class TeacherProfileWriteSerializer(serializers.ModelSerializer):
     subjects = serializers.ListField(child=serializers.CharField(max_length=100), required=False, write_only=True)
     languages = serializers.ListField(child=serializers.CharField(max_length=50), required=False, write_only=True)
     availability = serializers.ListField(child=serializers.CharField(max_length=10), required=False, write_only=True)
+    reviews = ReviewSerializer(many=True, read_only=True)
 
     class Meta:
         model = TeacherProfile
         fields = [
             'id', 'name', 'image', 'headline', 'bio', 'hourly_rate', 'currency',
             'experience', 'country', 'city', 'timezone', 'verified',
-            'subjects', 'languages', 'availability',
+            'rating', 'review_count', 'total_students',
+            'subjects', 'languages', 'availability', 'reviews',
         ]
-        read_only_fields = ['id', 'name', 'image', 'verified']
+        read_only_fields = [
+            'id', 'name', 'image', 'verified', 'rating', 'review_count', 'total_students',
+        ]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -130,14 +134,25 @@ class TeacherProfileWriteSerializer(serializers.ModelSerializer):
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    # Display fields so dashboards can render the other party without extra
+    # round-trips (teacher-side sees the student, student-side sees the teacher).
+    teacher_name = serializers.CharField(source='teacher.user.name', read_only=True)
+    teacher_image = serializers.CharField(source='teacher.user.image', read_only=True)
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_image = serializers.CharField(source='student.image', read_only=True)
+
     class Meta:
         model = Booking
         fields = [
-            'id', 'student', 'teacher', 'subject', 'date', 'duration',
+            'id', 'student', 'teacher', 'teacher_name', 'teacher_image',
+            'student_name', 'student_image', 'subject', 'date', 'duration',
             'price', 'platform_fee', 'currency', 'status',
             'stripe_payment_id', 'meeting_link', 'notes', 'created_at',
         ]
-        read_only_fields = ['id', 'student', 'price', 'platform_fee', 'currency', 'status', 'created_at']
+        read_only_fields = [
+            'id', 'student', 'teacher_name', 'teacher_image', 'student_name',
+            'student_image', 'price', 'platform_fee', 'currency', 'status', 'created_at',
+        ]
 
     def create(self, validated_data):
         validated_data['student'] = self.context['request'].user

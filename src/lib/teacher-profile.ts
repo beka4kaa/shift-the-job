@@ -1,22 +1,12 @@
 import { DJANGO_API_URL } from '@/lib/django-api';
-import {
-  mockTeachers,
-  mockReviews,
-  type MockTeacher,
-  type MockReview,
-} from '@/lib/mock-data';
 
 /**
- * Normalized view of a teacher profile, shared by the Django and mock code
- * paths so the profile page renders identically regardless of source.
+ * Normalized view of a teacher profile produced from the Django API.
  *
- *   Django API row ─┐
- *                   ├─► ProfileView ─► profile page (badge from `isVerified`)
- *   mock teacher ───┘
+ *   Django API row ──► ProfileView ──► profile page (badge from `isVerified`)
  *
- * `isVerified` is the parent-facing trust signal. For real teachers it is
- * computed by the Django API (TeacherProfileSerializer.get_is_verified); for
- * mock teachers it falls back to the hardcoded `verified` flag.
+ * `isVerified` is the parent-facing trust signal, computed by the Django API
+ * (TeacherProfileSerializer.get_is_verified).
  */
 export interface ProfileReview {
   id: string;
@@ -47,7 +37,7 @@ export interface ProfileView {
   isVerified: boolean;
   availability: string[];
   reviews: ProfileReview[];
-  source: 'db' | 'mock';
+  source: 'db';
 }
 
 const DEFAULT_AVATAR = 'https://api.dicebear.com/9.x/avataaars/svg?seed=Student';
@@ -116,42 +106,6 @@ export function djangoTeacherToProfileView(row: DjangoTeacherRow): ProfileView {
   };
 }
 
-/** Pure mapping from a mock teacher (+ its mock reviews) to the uniform view. */
-export function mockToProfileView(
-  teacher: MockTeacher,
-  reviews: MockReview[],
-): ProfileView {
-  return {
-    id: teacher.id,
-    name: teacher.name,
-    image: teacher.image,
-    headline: teacher.headline,
-    bio: teacher.bio,
-    subjects: teacher.subjects,
-    hourlyRate: teacher.hourlyRate,
-    currency: teacher.currency,
-    experience: teacher.experience,
-    languages: teacher.languages,
-    country: teacher.country,
-    city: teacher.city,
-    rating: teacher.rating,
-    reviewCount: teacher.reviewCount,
-    totalStudents: teacher.totalStudents,
-    isVerified: teacher.verified,
-    availability: teacher.availability,
-    reviews: reviews.map((r) => ({
-      id: r.id,
-      studentName: r.studentName,
-      studentImage: r.studentImage,
-      rating: r.rating,
-      comment: r.comment,
-      date: r.date,
-      subject: r.subject,
-    })),
-    source: 'mock',
-  };
-}
-
 /** Fetch a real teacher profile from the Django API, or null if none exists. */
 export async function getTeacherProfile(id: string): Promise<ProfileView | null> {
   let res: Response;
@@ -162,7 +116,7 @@ export async function getTeacherProfile(id: string): Promise<ProfileView | null>
       next: { revalidate: 60 },
     });
   } catch {
-    // Django backend unreachable — fall back to mock data rather than 500ing the page.
+    // Django backend unreachable — no data to show.
     return null;
   }
 
@@ -173,45 +127,26 @@ export async function getTeacherProfile(id: string): Promise<ProfileView | null>
 }
 
 /**
- * List all teachers for the /teachers directory and homepage. Uses real Django
- * data; only when the backend is unreachable does it fall back to the mock set,
- * so a live-but-empty backend correctly shows "no tutors yet" rather than fake
- * ones. An empty successful response is returned as-is.
+ * List all teachers for the /teachers directory and homepage from the Django
+ * API. Returns an empty array on error/empty so callers render a real
+ * "no tutors yet" state rather than fabricated data.
  */
 export async function getTeacherList(): Promise<ProfileView[]> {
   try {
     const res = await fetch(`${DJANGO_API_URL}/api/teachers/`, {
       next: { revalidate: 60 },
     });
-    if (!res.ok) throw new Error(`teachers list failed: ${res.status}`);
+    if (!res.ok) return [];
     const rows: DjangoTeacherRow[] = await res.json();
     return rows.map(djangoTeacherToProfileView);
   } catch {
-    // Backend unreachable — fall back to mock so dev/outages still render.
-    return mockTeachers.map((t) =>
-      mockToProfileView(t, mockReviews.filter((r) => r.teacherId === t.id)),
-    );
+    return [];
   }
 }
 
-/**
- * Resolve a profile for the page: prefer a real Django teacher, fall back to
- * mock data so the existing prototype teacher ids ('1'..'12') keep working
- * (note: Django's ids are small sequential integers too, so a seeded teacher
- * can shadow a mock one with the same id — real data always wins, same as
- * before this cutover). Returns null when neither source has the id.
- */
+/** Resolve a teacher profile by id from Django, or null if it doesn't exist. */
 export async function resolveTeacherProfile(
   id: string,
 ): Promise<ProfileView | null> {
-  const real = await getTeacherProfile(id);
-  if (real) return real;
-
-  const mock = mockTeachers.find((t) => t.id === id);
-  if (!mock) return null;
-
-  return mockToProfileView(
-    mock,
-    mockReviews.filter((r) => r.teacherId === id),
-  );
+  return getTeacherProfile(id);
 }

@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   djangoTeacherToProfileView,
-  mockToProfileView,
   type DjangoTeacherRow,
 } from './teacher-profile';
-import type { MockTeacher, MockReview } from './mock-data';
 
 function buildRow(overrides: Partial<DjangoTeacherRow> = {}): DjangoTeacherRow {
   return {
@@ -79,51 +77,5 @@ describe('djangoTeacherToProfileView', () => {
       subject: 'Mathematics',
     });
     expect(view.reviews[0].studentImage).toContain('dicebear');
-  });
-});
-
-describe('mockToProfileView', () => {
-  const mockTeacher: MockTeacher = {
-    id: '7',
-    name: 'Anastasia',
-    image: 'https://img/anastasia',
-    headline: 'Chem',
-    bio: 'Bio',
-    subjects: ['Chemistry'],
-    hourlyRate: 30,
-    currency: 'USD',
-    experience: 4,
-    languages: ['English'],
-    country: 'Russia',
-    city: 'Moscow',
-    rating: 4.6,
-    reviewCount: 1,
-    totalStudents: 130,
-    verified: false,
-    featured: false,
-    availability: ['Tue'],
-  };
-
-  it('derives isVerified from the mock verified flag', () => {
-    expect(mockToProfileView({ ...mockTeacher, verified: true }, []).isVerified).toBe(true);
-    expect(mockToProfileView({ ...mockTeacher, verified: false }, []).isVerified).toBe(false);
-  });
-
-  it('maps mock reviews straight through and tags the source', () => {
-    const reviews: MockReview[] = [
-      {
-        id: 'r1',
-        studentName: 'Anna',
-        studentImage: 'https://img/anna',
-        teacherId: '7',
-        rating: 5,
-        comment: 'Loved it',
-        date: '2025-07-15',
-        subject: 'Chemistry',
-      },
-    ];
-    const view = mockToProfileView(mockTeacher, reviews);
-    expect(view.source).toBe('mock');
-    expect(view.reviews[0]).toMatchObject({ id: 'r1', studentName: 'Anna', subject: 'Chemistry' });
   });
 });
