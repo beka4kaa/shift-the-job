@@ -129,6 +129,10 @@ STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 PLATFORM_FEE = 0.15  # matches src/lib/constants.ts PLATFORM_FEE
 
+# Google OAuth. Verifies the audience of id_tokens posted to /api/auth/google/
+# by the frontend after a "Continue with Google" flow (see accounts/views.py).
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+
 # Django's default logging config swallows INFO from app loggers (e.g. the
 # password-reset link log in accounts/views.py) unless explicitly enabled.
 LOGGING = {

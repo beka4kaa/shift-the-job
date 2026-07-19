@@ -2,9 +2,12 @@ import logging
 
 from django.conf import settings
 from django.utils import timezone
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import PasswordResetToken, User
@@ -27,6 +30,62 @@ class RegisterView(generics.CreateAPIView):
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+
+
+class GoogleAuthView(APIView):
+    """Verifies a Google id_token (obtained by the frontend's NextAuth Google
+    provider), then finds-or-creates the matching user and issues this backend's
+    own JWTs — the same {access, refresh, user} shape as LoginView. This keeps
+    Django the source of truth: a Google sign-in produces a real local user and
+    a real access token, so bookings/Stripe work identically to password login.
+    """
+
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get('id_token')
+        if not token:
+            return Response({'detail': 'Missing id_token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not settings.GOOGLE_CLIENT_ID:
+            logger.error('GOOGLE_AUTH_ERROR: GOOGLE_CLIENT_ID is not configured')
+            return Response({'detail': 'Google login is not configured'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            info = google_id_token.verify_oauth2_token(
+                token, google_requests.Request(), settings.GOOGLE_CLIENT_ID
+            )
+        except ValueError:
+            # Bad signature, wrong audience, expired token, etc.
+            return Response({'detail': 'Invalid Google token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        email = info.get('email')
+        if not email or not info.get('email_verified'):
+            return Response({'detail': 'Google account email is not verified'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        email = User.objects.normalize_email(email)
+        name = info.get('name') or email.split('@')[0]
+        picture = info.get('picture')
+
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={'name': name, 'image': picture},
+        )
+        if created:
+            # Google-only account — no usable password until they set one.
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
+        elif picture and user.image != picture:
+            user.image = picture
+            user.save(update_fields=['image'])
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': UserSerializer(user).data,
+        })
 
 
 class MeView(generics.RetrieveAPIView):

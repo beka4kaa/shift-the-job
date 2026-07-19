@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { PUBLIC_DJANGO_API_URL } from '@/lib/django-api';
+import { GoogleButton } from '@/components/GoogleButton';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -148,6 +149,14 @@ export default function RegisterPage() {
             {loading ? 'Creating account…' : 'Create Account'}
           </button>
         </form>
+
+        <div className="flex items-center gap-4 my-6">
+          <div className="h-px flex-1 bg-black/10" />
+          <span className="text-xs uppercase tracking-[0.14em] text-black/40">or</span>
+          <div className="h-px flex-1 bg-black/10" />
+        </div>
+
+        <GoogleButton label="Sign up with Google" />
 
         <div className="mt-8 text-center text-sm text-black/55">
           Already have an account?{' '}

@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
 import { DJANGO_API_URL } from '@/lib/django-api';
 
 interface DjangoLoginResponse {
@@ -13,6 +14,26 @@ interface DjangoLoginResponse {
     image: string | null;
     role: string;
   };
+}
+
+/**
+ * Trade a Google id_token (from the NextAuth Google provider) for this app's
+ * own Django JWTs, so a Google sign-in yields a real Django user + access token
+ * — the rest of the app (bookings, Stripe) then works exactly as with password
+ * login. Returns null if Django rejects the token or is unreachable.
+ */
+async function exchangeGoogleToken(idToken: string): Promise<DjangoLoginResponse | null> {
+  try {
+    const res = await fetch(`${DJANGO_API_URL}/api/auth/google/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_token: idToken }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as DjangoLoginResponse;
+  } catch {
+    return null;
+  }
 }
 
 // Refresh a little before the token actually expires so an in-flight request
@@ -75,6 +96,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/auth/login',
   },
   providers: [
+    // Reads AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET from the environment.
+    Google,
     Credentials({
       name: 'Credentials',
       credentials: {
@@ -114,9 +137,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      // Initial sign-in: seed the token from the Django login response and
-      // record when the access token expires.
+    async jwt({ token, user, account }) {
+      // Initial sign-in via Google: exchange the Google id_token for Django
+      // JWTs so this session is backed by a real Django user, same as password
+      // login. `account`/`user` are only present on the initial call.
+      if (account?.provider === 'google' && account.id_token) {
+        const django = await exchangeGoogleToken(account.id_token);
+        if (!django) return { ...token, error: 'GoogleAuthError' };
+
+        token.role = django.user.role;
+        token.id = String(django.user.id);
+        token.name = django.user.name;
+        token.email = django.user.email;
+        token.picture = django.user.image ?? token.picture;
+        token.djangoAccessToken = django.access;
+        token.djangoRefreshToken = django.refresh;
+        token.accessTokenExpires = getAccessTokenExpiry(django.access);
+        return token;
+      }
+
+      // Initial sign-in via Credentials: seed the token from the Django login
+      // response and record when the access token expires.
       if (user) {
         token.role = user.role;
         token.id = user.id;

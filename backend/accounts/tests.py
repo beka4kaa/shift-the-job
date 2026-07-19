@@ -1,6 +1,7 @@
 from datetime import timedelta
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -120,3 +121,59 @@ class AuthAPITests(APITestCase):
         second = self.client.post('/api/auth/reset-password/', {'token': raw_token, 'password': 'anotherpass123'})
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 400)
+
+
+@override_settings(GOOGLE_CLIENT_ID='test-client-id')
+class GoogleAuthAPITests(APITestCase):
+    """The id_token is verified by Google's library, which needs network + real
+    Google keys — so verify_oauth2_token is mocked to return a decoded claim set,
+    letting us test our find-or-create + JWT-issuing logic in isolation."""
+
+    URL = '/api/auth/google/'
+
+    def _claims(self, **overrides):
+        base = {'email': 'g@example.com', 'email_verified': True, 'name': 'Gee', 'picture': 'https://img/g.png'}
+        base.update(overrides)
+        return base
+
+    @patch('accounts.views.google_id_token.verify_oauth2_token')
+    def test_valid_token_creates_user_and_returns_jwt(self, mock_verify):
+        mock_verify.return_value = self._claims()
+        res = self.client.post(self.URL, {'id_token': 'valid'}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('access', res.data)
+        self.assertIn('refresh', res.data)
+        self.assertEqual(res.data['user']['email'], 'g@example.com')
+        user = User.objects.get(email='g@example.com')
+        self.assertEqual(user.role, User.Role.STUDENT)
+        self.assertFalse(user.has_usable_password())
+
+    @patch('accounts.views.google_id_token.verify_oauth2_token')
+    def test_valid_token_for_existing_user_does_not_duplicate(self, mock_verify):
+        User.objects.create_user(email='g@example.com', name='Existing', password='pw123456')
+        mock_verify.return_value = self._claims()
+        res = self.client.post(self.URL, {'id_token': 'valid'}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(User.objects.filter(email='g@example.com').count(), 1)
+
+    def test_missing_id_token_is_bad_request(self):
+        res = self.client.post(self.URL, {}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    @patch('accounts.views.google_id_token.verify_oauth2_token')
+    def test_invalid_token_is_unauthorized(self, mock_verify):
+        mock_verify.side_effect = ValueError('bad token')
+        res = self.client.post(self.URL, {'id_token': 'forged'}, format='json')
+        self.assertEqual(res.status_code, 401)
+
+    @patch('accounts.views.google_id_token.verify_oauth2_token')
+    def test_unverified_email_is_rejected(self, mock_verify):
+        mock_verify.return_value = self._claims(email_verified=False)
+        res = self.client.post(self.URL, {'id_token': 'valid'}, format='json')
+        self.assertEqual(res.status_code, 401)
+        self.assertFalse(User.objects.filter(email='g@example.com').exists())
+
+    @override_settings(GOOGLE_CLIENT_ID='')
+    def test_returns_503_when_not_configured(self):
+        res = self.client.post(self.URL, {'id_token': 'valid'}, format='json')
+        self.assertEqual(res.status_code, 503)
