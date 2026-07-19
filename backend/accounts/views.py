@@ -88,7 +88,10 @@ class GoogleAuthView(APIView):
         })
 
 
-class MeView(generics.RetrieveAPIView):
+class MeView(generics.RetrieveUpdateAPIView):
+    """GET returns the current user; PATCH/PUT lets them edit their own
+    name/image (email and role are read-only, enforced by UserSerializer)."""
+
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 

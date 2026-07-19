@@ -1,10 +1,27 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowUpRight, BadgeCheck, Star } from 'lucide-react';
-import { type MockTeacher } from '@/lib/mock-data';
 import { formatPrice, getCountryFlag } from '@/lib/utils';
 
-interface TeacherCardProps { teacher: MockTeacher }
+/**
+ * Minimal shape a teacher card needs. `ProfileView` (the uniform Django/mock
+ * view) is a superset, so both real and fallback data satisfy it.
+ */
+export interface TeacherCardData {
+  id: string;
+  name: string;
+  image: string;
+  headline: string;
+  country: string;
+  city: string;
+  hourlyRate: number;
+  currency: string;
+  subjects: string[];
+  rating: number;
+  isVerified: boolean;
+}
+
+interface TeacherCardProps { teacher: TeacherCardData }
 
 export function TeacherCard({ teacher }: TeacherCardProps) {
   return (
@@ -20,7 +37,7 @@ export function TeacherCard({ teacher }: TeacherCardProps) {
           <div>
             <div className="flex items-center gap-1.5">
               <h3 className="text-lg font-medium tracking-[-0.02em] text-white">{teacher.name}</h3>
-              {teacher.verified && <BadgeCheck className="h-4 w-4 text-[#cfe16f]" />}
+              {teacher.isVerified && <BadgeCheck className="h-4 w-4 text-[#cfe16f]" />}
             </div>
             <p className="mt-1 line-clamp-1 text-sm text-white/45">{getCountryFlag(teacher.country)} {teacher.city} · {teacher.headline}</p>
           </div>

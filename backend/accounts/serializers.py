@@ -8,7 +8,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'email', 'name', 'image', 'role', 'created_at']
-        read_only_fields = ['id', 'role', 'created_at']
+        # email is the login identifier and role is privilege-bearing, so both
+        # stay read-only — only name/image are user-editable via PATCH /me/.
+        read_only_fields = ['id', 'email', 'role', 'created_at']
 
 
 class RegisterSerializer(serializers.ModelSerializer):

@@ -1,4 +1,7 @@
-from rest_framework import permissions, viewsets
+from rest_framework import generics, permissions, viewsets
+from rest_framework.exceptions import PermissionDenied
+
+from accounts.models import User
 
 from .models import Booking, Review, Subject, TeacherProfile
 from .serializers import (
@@ -6,6 +9,7 @@ from .serializers import (
     ReviewSerializer,
     SubjectSerializer,
     TeacherProfileSerializer,
+    TeacherProfileWriteSerializer,
 )
 
 
@@ -13,6 +17,27 @@ class SubjectViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
     permission_classes = [permissions.AllowAny]
+
+
+class MyTeacherProfileView(generics.RetrieveUpdateAPIView):
+    """The logged-in teacher's own editable profile. Created on first access so
+    a freshly-registered teacher lands on a blank, ready-to-fill profile.
+    Restricted to TEACHER accounts."""
+
+    serializer_class = TeacherProfileWriteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        if self.request.user.role != User.Role.TEACHER:
+            raise PermissionDenied('Only teacher accounts have a teaching profile.')
+        profile, _ = TeacherProfile.objects.get_or_create(
+            user=self.request.user,
+            defaults={
+                'headline': '', 'bio': '', 'hourly_rate': 0, 'experience': 0,
+                'country': '', 'city': '',
+            },
+        )
+        return profile
 
 
 class TeacherProfileViewSet(viewsets.ReadOnlyModelViewSet):

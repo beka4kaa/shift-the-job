@@ -70,6 +70,63 @@ class TeacherProfileAPITests(APITestCase):
         self.assertEqual(sorted(res.data['availability']), ['Fri', 'Mon'])
 
 
+class MyTeacherProfileAPITests(APITestCase):
+    URL = '/api/teachers/me/'
+
+    def test_requires_authentication(self):
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_students_are_forbidden(self):
+        student = User.objects.create_user(email='s@example.com', name='S', password='pw123456')
+        self.client.force_authenticate(user=student)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+
+    def test_get_creates_blank_profile_on_first_access(self):
+        teacher_user = User.objects.create_user(
+            email='t@example.com', name='T', password='pw123456', role=User.Role.TEACHER
+        )
+        self.client.force_authenticate(user=teacher_user)
+        self.assertFalse(TeacherProfile.objects.filter(user=teacher_user).exists())
+        res = self.client.get(self.URL)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(TeacherProfile.objects.filter(user=teacher_user).exists())
+        self.assertEqual(res.data['name'], 'T')
+
+    def test_put_updates_scalars_and_nested_lists(self):
+        teacher = make_teacher(email='u@example.com')
+        self.client.force_authenticate(user=teacher.user)
+        payload = {
+            'headline': 'IELTS Coach', 'bio': 'New bio', 'hourly_rate': 40,
+            'currency': 'USD', 'experience': 6, 'country': 'Kazakhstan', 'city': 'Astana',
+            'subjects': ['IELTS', 'English'], 'languages': ['English', 'Russian'],
+            'availability': ['Mon', 'Wed', 'Fri'],
+        }
+        res = self.client.put(self.URL, payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        teacher.refresh_from_db()
+        self.assertEqual(teacher.headline, 'IELTS Coach')
+        self.assertEqual(teacher.hourly_rate, 40)
+        self.assertEqual(sorted(s.name for s in teacher.subjects.all()), ['English', 'IELTS'])
+        self.assertEqual(sorted(lang.code for lang in teacher.languages.all()), ['English', 'Russian'])
+        self.assertEqual(sorted(a.day_of_week for a in teacher.availabilities.all()), [0, 2, 4])
+
+    def test_put_replaces_previous_nested_lists(self):
+        teacher = make_teacher(email='v@example.com')
+        TeacherSubject.objects.create(teacher_profile=teacher, name='OldSubject')
+        self.client.force_authenticate(user=teacher.user)
+        res = self.client.patch(self.URL, {'subjects': ['NewSubject']}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([s.name for s in teacher.subjects.all()], ['NewSubject'])
+
+    def test_cannot_change_verified_flag(self):
+        teacher = make_teacher(email='w@example.com', verified=False)
+        self.client.force_authenticate(user=teacher.user)
+        res = self.client.patch(self.URL, {'verified': True}, format='json')
+        self.assertEqual(res.status_code, 200)
+        teacher.refresh_from_db()
+        self.assertFalse(teacher.verified)
+
+
 class BookingAPITests(APITestCase):
     def test_create_requires_authentication(self):
         teacher = make_teacher()

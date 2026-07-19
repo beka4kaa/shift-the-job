@@ -1,9 +1,12 @@
-import { mockTeachers } from '@/lib/mock-data';
+import Link from 'next/link';
+import { getTeacherList } from '@/lib/teacher-profile';
 import { TeacherCard } from '@/components/TeacherCard';
 import { SearchFilters } from '@/components/SearchFilters';
 import { Sliders } from 'lucide-react';
 
-export default function TeachersPage() {
+export default async function TeachersPage() {
+  const teachers = await getTeacherList();
+
   return (
     <div className="min-h-screen bg-[#f4f1e9] text-[#171813]">
       <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-32 pb-16">
@@ -13,7 +16,7 @@ export default function TeachersPage() {
             Find your perfect tutor
           </h1>
           <p className="text-black/50 mt-3">
-            Showing {mockTeachers.length} tutors
+            Showing {teachers.length} {teachers.length === 1 ? 'tutor' : 'tutors'}
           </p>
         </div>
 
@@ -45,11 +48,21 @@ export default function TeachersPage() {
             </div>
 
             {/* Teacher Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px bg-black/10">
-              {mockTeachers.map((teacher) => (
-                <TeacherCard key={teacher.id} teacher={teacher} />
-              ))}
-            </div>
+            {teachers.length === 0 ? (
+              <div className="border border-black/10 p-12 text-center text-black/50">
+                No tutors yet. Be the first to{' '}
+                <Link href="/auth/register" className="underline decoration-1 underline-offset-4 text-black">
+                  create a teaching profile
+                </Link>
+                .
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px bg-black/10">
+                {teachers.map((teacher) => (
+                  <TeacherCard key={teacher.id} teacher={teacher} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

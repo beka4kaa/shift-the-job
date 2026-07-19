@@ -1,5 +1,6 @@
 'use client';
 
+import { useSession } from 'next-auth/react';
 import { mockBookings, mockReviews } from '@/lib/mock-data';
 import { ReviewCard } from '@/components/ReviewCard';
 import {
@@ -22,10 +23,12 @@ const sidebarItems = [
   { label: 'Students', icon: Users, href: '/dashboard/teacher/students', active: false },
   { label: 'Reviews', icon: Star, href: '/dashboard/teacher/reviews', active: false },
   { label: 'Earnings', icon: DollarSign, href: '/dashboard/teacher/earnings', active: false },
-  { label: 'Settings', icon: Settings, href: '/dashboard/teacher/settings', active: false },
+  { label: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
 ];
 
 export default function TeacherDashboardPage() {
+  const { data: session } = useSession();
+  const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
   const upcomingBookings = mockBookings.filter((b) => b.status === 'upcoming');
   const teacherReviews = mockReviews.filter((r) => r.teacherId === '1').slice(0, 3);
 
@@ -57,7 +60,7 @@ export default function TeacherDashboardPage() {
       {/* Main Content */}
       <main className="flex-1 p-8">
         {/* Welcome */}
-        <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, Sarah! 👋</h1>
+        <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
 
         {/* Earnings Overview */}
         <div className="border border-black/10 p-6 mb-8">

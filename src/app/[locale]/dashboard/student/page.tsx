@@ -1,5 +1,6 @@
 'use client';
 
+import { useSession } from 'next-auth/react';
 import { mockBookings } from '@/lib/mock-data';
 import {
   Calendar,
@@ -17,10 +18,12 @@ const sidebarItems = [
   { label: 'My Bookings', icon: Calendar, href: '/dashboard/student/bookings', active: false },
   { label: 'Favorites', icon: Heart, href: '/dashboard/student/favorites', active: false },
   { label: 'Messages', icon: MessageCircle, href: '/dashboard/student/messages', active: false },
-  { label: 'Settings', icon: Settings, href: '/dashboard/student/settings', active: false },
+  { label: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
 ];
 
 export default function StudentDashboardPage() {
+  const { data: session } = useSession();
+  const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
   const upcomingBookings = mockBookings.filter((b) => b.status === 'upcoming');
   const completedBookings = mockBookings.filter((b) => b.status === 'completed');
 
@@ -52,7 +55,7 @@ export default function StudentDashboardPage() {
       {/* Main Content */}
       <main className="flex-1 p-8">
         {/* Welcome */}
-        <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, Alex! 👋</h1>
+        <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 border-l border-t border-black/10 mb-8">

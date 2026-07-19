@@ -82,6 +82,26 @@ class AuthAPITests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data['email'], 'd@example.com')
 
+    def test_me_patch_updates_name_and_image(self):
+        user = User.objects.create_user(email='p@example.com', name='Old', password='pw123456')
+        self.client.force_authenticate(user=user)
+        res = self.client.patch('/api/auth/me/', {'name': 'New Name', 'image': 'https://example.com/a.png'}, format='json')
+        self.assertEqual(res.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.name, 'New Name')
+        self.assertEqual(user.image, 'https://example.com/a.png')
+
+    def test_me_patch_cannot_change_email_or_role(self):
+        user = User.objects.create_user(email='q@example.com', name='Q', password='pw123456')
+        self.client.force_authenticate(user=user)
+        res = self.client.patch(
+            '/api/auth/me/', {'email': 'hacker@example.com', 'role': 'ADMIN'}, format='json'
+        )
+        self.assertEqual(res.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.email, 'q@example.com')
+        self.assertEqual(user.role, User.Role.STUDENT)
+
     def test_forgot_password_same_response_for_real_and_fake_email(self):
         User.objects.create_user(email='e@example.com', name='E', password='pw123456')
         real = self.client.post('/api/auth/forgot-password/', {'email': 'e@example.com'})

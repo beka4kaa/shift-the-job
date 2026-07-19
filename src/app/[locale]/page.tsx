@@ -6,12 +6,13 @@ import { TeacherCard } from '@/components/TeacherCard';
 import { ReviewCard } from '@/components/ReviewCard';
 import { HowItWorks } from '@/components/HowItWorks';
 import { SUBJECTS } from '@/lib/constants';
-import { mockTeachers, mockReviews } from '@/lib/mock-data';
+import { mockReviews } from '@/lib/mock-data';
+import { getTeacherList } from '@/lib/teacher-profile';
 
 const quickTags = ['SAT', 'IELTS', 'TOEFL', 'GRE', 'GMAT'];
 
-export default function HomePage() {
-  const featuredTeachers = mockTeachers.filter((teacher) => teacher.featured).slice(0, 3);
+export default async function HomePage() {
+  const featuredTeachers = (await getTeacherList()).slice(0, 3);
   const spotlightTeacher = featuredTeachers[0];
 
   return (
@@ -41,29 +42,31 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="border border-black/10 bg-[#e8e3d8] p-3">
-            <div className="relative aspect-[4/3] overflow-hidden bg-[#d8d4ca]">
-              <Image
-                src={spotlightTeacher.image}
-                alt={spotlightTeacher.name}
-                fill
-                priority
-                unoptimized
-                sizes="(min-width: 1024px) 34vw, 90vw"
-                className="object-cover grayscale-[15%]"
-              />
-              <div className="absolute inset-x-3 bottom-3 flex items-end justify-between bg-[#f4f1e9]/95 p-4 backdrop-blur-sm">
-                <div>
-                  <p className="font-semibold text-[#171813]">{spotlightTeacher.name}</p>
-                  <p className="mt-1 text-xs text-black/55">SAT · Harvard graduate</p>
-                </div>
-                <div className="flex items-center gap-1 text-sm font-semibold">
-                  <Star className="h-3.5 w-3.5 fill-[#171813]" />
-                  {spotlightTeacher.rating}
+          {spotlightTeacher && (
+            <div className="border border-black/10 bg-[#e8e3d8] p-3">
+              <div className="relative aspect-[4/3] overflow-hidden bg-[#d8d4ca]">
+                <Image
+                  src={spotlightTeacher.image}
+                  alt={spotlightTeacher.name}
+                  fill
+                  priority
+                  unoptimized
+                  sizes="(min-width: 1024px) 34vw, 90vw"
+                  className="object-cover grayscale-[15%]"
+                />
+                <div className="absolute inset-x-3 bottom-3 flex items-end justify-between bg-[#f4f1e9]/95 p-4 backdrop-blur-sm">
+                  <div>
+                    <p className="font-semibold text-[#171813]">{spotlightTeacher.name}</p>
+                    <p className="mt-1 text-xs text-black/55">{spotlightTeacher.headline}</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm font-semibold">
+                    <Star className="h-3.5 w-3.5 fill-[#171813]" />
+                    {spotlightTeacher.rating}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

@@ -173,6 +173,28 @@ export async function getTeacherProfile(id: string): Promise<ProfileView | null>
 }
 
 /**
+ * List all teachers for the /teachers directory and homepage. Uses real Django
+ * data; only when the backend is unreachable does it fall back to the mock set,
+ * so a live-but-empty backend correctly shows "no tutors yet" rather than fake
+ * ones. An empty successful response is returned as-is.
+ */
+export async function getTeacherList(): Promise<ProfileView[]> {
+  try {
+    const res = await fetch(`${DJANGO_API_URL}/api/teachers/`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`teachers list failed: ${res.status}`);
+    const rows: DjangoTeacherRow[] = await res.json();
+    return rows.map(djangoTeacherToProfileView);
+  } catch {
+    // Backend unreachable — fall back to mock so dev/outages still render.
+    return mockTeachers.map((t) =>
+      mockToProfileView(t, mockReviews.filter((r) => r.teacherId === t.id)),
+    );
+  }
+}
+
+/**
  * Resolve a profile for the page: prefer a real Django teacher, fall back to
  * mock data so the existing prototype teacher ids ('1'..'12') keep working
  * (note: Django's ids are small sequential integers too, so a seeded teacher
