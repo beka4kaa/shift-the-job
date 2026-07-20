@@ -48,6 +48,11 @@ class StripeCheckoutView(APIView):
         except (TeacherProfile.DoesNotExist, ValueError, TypeError):
             return Response('Teacher not found', status=status.HTTP_404_NOT_FOUND)
 
+        # A teacher who hasn't been approved by an admin can't take bookings —
+        # mirrors the public listing gate so they can't earn while unverified.
+        if not teacher.verified or not teacher.user.is_active:
+            return Response('This tutor is not available for booking', status=status.HTTP_403_FORBIDDEN)
+
         if teacher.user_id == request.user.id:
             return Response('You cannot book yourself', status=status.HTTP_400_BAD_REQUEST)
         if teacher.hourly_rate <= 0:

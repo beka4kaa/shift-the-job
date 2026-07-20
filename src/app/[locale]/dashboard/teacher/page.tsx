@@ -23,6 +23,7 @@ import {
 
 interface TeacherProfile {
   id: number;
+  verified: boolean;
   rating: number;
   review_count: number;
   total_students: number;
@@ -108,6 +109,16 @@ export default function TeacherDashboardPage() {
   return (
     <DashboardShell role="teacher">
         <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
+
+        {!loading && profile && !profile.verified && (
+          <div className="mb-8 border border-[#c9a227]/40 bg-[#fbf3d5] p-5">
+            <p className="text-sm font-semibold text-[#7a5c00]">Your profile is pending admin approval</p>
+            <p className="mt-1 text-sm text-[#7a5c00]/80">
+              You won’t appear in search or be bookable until an admin verifies your account. Complete your{' '}
+              <Link href="/dashboard/settings" className="underline underline-offset-4">profile in settings</Link> to speed this up.
+            </p>
+          </div>
+        )}
 
         {/* Earnings Overview */}
         <div className="border border-black/10 p-6 mb-8">

@@ -45,7 +45,10 @@ class MyTeacherProfileView(generics.RetrieveUpdateAPIView):
 
 
 class TeacherProfileViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = TeacherProfile.objects.filter(user__is_active=True, user__role=User.Role.TEACHER).select_related('user').prefetch_related(
+    # Only admin-approved (verified) teachers are public and bookable. A
+    # self-registered teacher stays hidden — not listed, not viewable by direct
+    # link, not bookable — until an admin verifies them in the control panel.
+    queryset = TeacherProfile.objects.filter(user__is_active=True, user__role=User.Role.TEACHER, verified=True).select_related('user').prefetch_related(
         'subjects', 'languages', 'availabilities', 'certificates', 'reviews__student'
     ).annotate(
         calculated_rating=Avg('reviews__rating'),

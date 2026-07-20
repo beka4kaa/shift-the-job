@@ -330,6 +330,9 @@ class AdminTeacherViewSet(viewsets.ModelViewSet):
             )
         if state == 'verified':
             queryset = queryset.filter(verified=True)
+        elif state == 'pending':
+            # Awaiting admin approval: active teacher accounts not yet verified.
+            queryset = queryset.filter(verified=False, user__is_active=True)
         elif state == 'featured':
             queryset = queryset.filter(featured=True)
         elif state == 'inactive':
@@ -471,6 +474,7 @@ class AdminSummaryView(APIView):
                 'new_users_30d': User.objects.filter(created_at__gte=timezone.now() - timedelta(days=30)).count(),
                 'teachers': TeacherProfile.objects.count(),
                 'verified_teachers': TeacherProfile.objects.filter(verified=True).count(),
+                'pending_teachers': TeacherProfile.objects.filter(verified=False, user__is_active=True).count(),
                 'bookings': Booking.objects.count(),
                 'paid_bookings': paid.count(),
                 'pending_bookings': Booking.objects.filter(status=Booking.Status.PENDING).count(),

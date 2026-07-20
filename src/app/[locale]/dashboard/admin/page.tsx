@@ -34,6 +34,15 @@ export default function AdminOverviewPage() {
     <AdminShell>
       <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-black/35">Control center</p><h1 className="text-4xl font-medium tracking-[-0.04em]">Business overview</h1><p className="mt-3 text-sm text-black/45">Users, learning activity and marketplace revenue in one place.</p></div><Link href="/dashboard/admin/teachers/new" className="inline-flex w-fit items-center gap-2 bg-[#171813] px-5 py-3 text-sm font-semibold text-white hover:bg-[#91a838] hover:text-black">Add teacher <ArrowUpRight className="h-4 w-4" /></Link></div>
       {error && <div className="mb-6 border border-red-700/20 p-4 text-sm text-red-700">{error}</div>}
+      {(metrics?.pending_teachers ?? 0) > 0 && (
+        <Link href="/dashboard/admin/teachers?state=pending" className="mb-6 flex items-center justify-between gap-4 border border-[#728523]/40 bg-[#eef3dc] p-4 hover:bg-[#e7efcf]">
+          <span className="flex items-center gap-3 text-sm">
+            <ShieldCheck className="h-5 w-5 text-[#728523]" />
+            <span><strong>{metrics?.pending_teachers}</strong> teacher{metrics?.pending_teachers === 1 ? '' : 's'} awaiting verification — approve them before they appear on the platform.</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold underline underline-offset-4">Review</span>
+        </Link>
+      )}
       <div className="mb-8 grid border-l border-t border-black/10 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map(({ label, value, detail, icon: Icon }) => <div key={label} className="border-b border-r border-black/10 bg-[#f5f2e9] p-5"><Icon className="mb-7 h-5 w-5 text-[#728523]" /><p className="text-xs font-semibold uppercase tracking-[0.12em] text-black/35">{label}</p><p className="mt-2 text-3xl font-medium tracking-[-0.04em]">{data ? value : '—'}</p><p className="mt-2 text-xs text-black/40">{detail}</p></div>)}
       </div>

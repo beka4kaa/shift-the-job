@@ -19,8 +19,10 @@ from .models import (
 def make_teacher(email='teacher@example.com', **overrides):
     user = User.objects.create_user(email=email, name='Teacher', password='pw123456', role=User.Role.TEACHER)
     defaults = dict(
+        # verified defaults to True so most tests get an approved, publicly
+        # listed/bookable teacher; gate tests pass verified=False explicitly.
         headline='Math Tutor', bio='Bio', hourly_rate=25.0, currency='USD',
-        experience=10, country='Kazakhstan', city='Almaty',
+        experience=10, country='Kazakhstan', city='Almaty', verified=True,
     )
     defaults.update(overrides)
     return TeacherProfile.objects.create(user=user, **defaults)
@@ -42,19 +44,18 @@ class TeacherProfileAPITests(APITestCase):
         res = self.client.get(f'/api/teachers/{teacher.id}/')
         self.assertTrue(res.data['is_verified'])
 
-    def test_is_verified_false_when_no_certificate_is_verified(self):
-        teacher = make_teacher()
-        TeacherCertificate.objects.create(
-            teacher_profile=teacher, url='https://example.com/c.pdf',
-            verification_status=TeacherCertificate.VerificationStatus.PENDING,
-        )
-        res = self.client.get(f'/api/teachers/{teacher.id}/')
-        self.assertFalse(res.data['is_verified'])
+    def test_unverified_teacher_is_hidden_from_the_public_listing(self):
+        make_teacher(email='approved@example.com', verified=True)
+        make_teacher(email='pending@example.com', verified=False)
+        res = self.client.get('/api/teachers/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['name'], 'Teacher')  # only the approved one
 
-    def test_is_verified_false_with_no_certificates_at_all(self):
-        teacher = make_teacher()
+    def test_unverified_teacher_detail_is_not_publicly_viewable(self):
+        teacher = make_teacher(verified=False)
         res = self.client.get(f'/api/teachers/{teacher.id}/')
-        self.assertFalse(res.data['is_verified'])
+        self.assertEqual(res.status_code, 404)
 
     def test_subjects_and_languages_serialize_as_plain_string_lists(self):
         teacher = make_teacher()
@@ -331,6 +332,23 @@ class AdminPanelAPITests(APITestCase):
         self.assertEqual(res.data['metrics']['teacher_earnings'], 85)
         self.assertEqual(len(res.data['trend']), 12)
 
+    def test_pending_filter_and_metric_surface_unverified_teachers(self):
+        make_teacher(email='approved-admin@example.com', verified=True)
+        make_teacher(email='pending-admin@example.com', verified=False)
+        pending = self.client.get('/api/admin/teachers/?state=pending')
+        self.assertEqual(pending.status_code, 200)
+        self.assertEqual(len(pending.data), 1)
+        self.assertFalse(pending.data[0]['verified'])
+        summary = self.client.get('/api/admin/summary/')
+        self.assertEqual(summary.data['metrics']['pending_teachers'], 1)
+
+    def test_admin_can_approve_a_pending_teacher(self):
+        teacher = make_teacher(email='to-approve@example.com', verified=False)
+        res = self.client.patch(f'/api/admin/teachers/{teacher.id}/', {'verified': True}, format='json')
+        self.assertEqual(res.status_code, 200)
+        teacher.refresh_from_db()
+        self.assertTrue(teacher.verified)
+
     def test_admin_can_create_and_edit_a_teacher(self):
         created = self.client.post('/api/admin/teachers/', {
             'email': 'created-teacher@example.com', 'name': 'Created Teacher', 'password': 'teacher-pass-123',
@@ -405,6 +423,17 @@ class StripeCheckoutAPITests(APITestCase):
             'teacherId': teacher.id, 'subject': 'Mathematics', 'duration': 60,
         }, format='json')
         self.assertEqual(res.status_code, 400)
+
+    def test_cannot_book_an_unverified_teacher(self):
+        teacher = make_teacher(email='pending-checkout@example.com', hourly_rate=30.0, verified=False)
+        TeacherSubject.objects.create(teacher_profile=teacher, name='Mathematics')
+        student = User.objects.create_user(email='s-gate@example.com', name='SG', password='pw123456')
+        self.client.force_authenticate(user=student)
+        res = self.client.post('/api/stripe/checkout/', {
+            'teacherId': teacher.id, 'subject': 'Mathematics', 'date': '2099-08-01T14:00:00Z', 'duration': 60,
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(Booking.objects.filter(teacher=teacher).exists())
 
     @patch('tutoring.stripe_views.stripe.checkout.Session.create')
     def test_creates_a_pending_booking_with_computed_price(self, mock_create):

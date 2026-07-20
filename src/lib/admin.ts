@@ -4,6 +4,7 @@ export interface AdminMetrics {
   new_users_30d: number;
   teachers: number;
   verified_teachers: number;
+  pending_teachers: number;
   bookings: number;
   paid_bookings: number;
   pending_bookings: number;
