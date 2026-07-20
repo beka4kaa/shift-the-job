@@ -1,11 +1,13 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import PasswordResetToken, User
+from .models import PasswordResetToken, User, UserAvatar
+from .serializers import get_user_image_url
 
 
 class PasswordResetTokenTests(TestCase):
@@ -82,6 +84,15 @@ class AuthAPITests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data['email'], 'd@example.com')
 
+    def test_me_uses_default_avatar_when_user_has_no_image(self):
+        user = User.objects.create_user(email='default-avatar@example.com', name='D', password='pw123456')
+        self.client.force_authenticate(user=user)
+
+        res = self.client.get('/api/auth/me/')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['image'], 'http://localhost:3000/default-avatar.svg')
+
     def test_me_patch_updates_name_and_image(self):
         user = User.objects.create_user(email='p@example.com', name='Old', password='pw123456')
         self.client.force_authenticate(user=user)
@@ -101,6 +112,63 @@ class AuthAPITests(APITestCase):
         user.refresh_from_db()
         self.assertEqual(user.email, 'q@example.com')
         self.assertEqual(user.role, User.Role.STUDENT)
+
+    def test_avatar_upload_stores_file_and_returns_public_url(self):
+        user = User.objects.create_user(email='avatar@example.com', name='Avatar', password='pw123456')
+        self.client.force_authenticate(user=user)
+        image = SimpleUploadedFile('avatar.png', b'\x89PNG\r\n\x1a\n' + b'pixels', content_type='image/png')
+
+        res = self.client.post('/api/auth/me/avatar/', {'avatar': image}, format='multipart')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(f'/api/auth/avatar/{user.id}/', res.data['image'])
+        self.assertTrue(UserAvatar.objects.filter(user=user, content_type='image/png').exists())
+        user.refresh_from_db()
+        self.assertIsNotNone(user.avatar_updated_at)
+
+    def test_avatar_cache_key_changes_for_uploads_within_the_same_second(self):
+        user = User.objects.create_user(email='cache-avatar@example.com', name='Avatar', password='pw123456')
+        base = timezone.now().replace(microsecond=100)
+        user.avatar_updated_at = base
+        first = get_user_image_url(user)
+        user.avatar_updated_at = base.replace(microsecond=200)
+        second = get_user_image_url(user)
+        self.assertNotEqual(first, second)
+
+    def test_avatar_upload_rejects_disguised_non_image(self):
+        user = User.objects.create_user(email='bad-avatar@example.com', name='Avatar', password='pw123456')
+        self.client.force_authenticate(user=user)
+        fake = SimpleUploadedFile('avatar.png', b'not really an image', content_type='image/png')
+
+        res = self.client.post('/api/auth/me/avatar/', {'avatar': fake}, format='multipart')
+
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(UserAvatar.objects.filter(user=user).exists())
+
+    def test_avatar_is_publicly_served_with_safe_headers(self):
+        user = User.objects.create_user(email='served@example.com', name='Avatar', password='pw123456')
+        UserAvatar.objects.create(user=user, data=b'\xff\xd8\xffimage', content_type='image/jpeg')
+
+        res = self.client.get(f'/api/auth/avatar/{user.id}/')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res['Content-Type'], 'image/jpeg')
+        self.assertEqual(res['X-Content-Type-Options'], 'nosniff')
+
+    def test_avatar_delete_restores_external_image(self):
+        user = User.objects.create_user(
+            email='delete-avatar@example.com', name='Avatar', password='pw123456', image='https://example.com/original.png'
+        )
+        UserAvatar.objects.create(user=user, data=b'\xff\xd8\xffimage', content_type='image/jpeg')
+        user.avatar_updated_at = timezone.now()
+        user.save(update_fields=['avatar_updated_at'])
+        self.client.force_authenticate(user=user)
+
+        res = self.client.delete('/api/auth/me/avatar/')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['image'], 'https://example.com/original.png')
+        self.assertFalse(UserAvatar.objects.filter(user=user).exists())
 
     def test_forgot_password_same_response_for_real_and_fake_email(self):
         User.objects.create_user(email='e@example.com', name='E', password='pw123456')
@@ -164,9 +232,19 @@ class GoogleAuthAPITests(APITestCase):
         self.assertIn('access', res.data)
         self.assertIn('refresh', res.data)
         self.assertEqual(res.data['user']['email'], 'g@example.com')
+        self.assertEqual(res.data['user']['image'], 'https://img/g.png')
         user = User.objects.get(email='g@example.com')
         self.assertEqual(user.role, User.Role.STUDENT)
         self.assertFalse(user.has_usable_password())
+
+    @patch('accounts.views.google_id_token.verify_oauth2_token')
+    def test_google_user_without_picture_gets_default_avatar(self, mock_verify):
+        mock_verify.return_value = self._claims(picture=None)
+
+        res = self.client.post(self.URL, {'id_token': 'valid'}, format='json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['user']['image'], 'http://localhost:3000/default-avatar.svg')
 
     @patch('accounts.views.google_id_token.verify_oauth2_token')
     def test_valid_token_for_existing_user_does_not_duplicate(self, mock_verify):

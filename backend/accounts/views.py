@@ -1,16 +1,17 @@
 import logging
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from rest_framework import generics, permissions, status
+from rest_framework import generics, parsers, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import PasswordResetToken, User
+from .models import PasswordResetToken, User, UserAvatar
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
@@ -20,6 +21,13 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+MAX_AVATAR_BYTES = 5 * 1024 * 1024
+AVATAR_SIGNATURES = {
+    'image/jpeg': lambda data: data.startswith(b'\xff\xd8\xff'),
+    'image/png': lambda data: data.startswith(b'\x89PNG\r\n\x1a\n'),
+    'image/webp': lambda data: len(data) >= 12 and data.startswith(b'RIFF') and data[8:12] == b'WEBP',
+}
 
 
 class RegisterView(generics.CreateAPIView):
@@ -84,7 +92,7 @@ class GoogleAuthView(APIView):
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
-            'user': UserSerializer(user).data,
+            'user': UserSerializer(user, context={'request': request}).data,
         })
 
 
@@ -97,6 +105,61 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class AvatarUploadView(APIView):
+    """Store a validated avatar in PostgreSQL and return the refreshed user."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser]
+
+    def post(self, request):
+        uploaded = request.FILES.get('avatar')
+        if uploaded is None:
+            return Response({'avatar': ['Choose an image file.']}, status=status.HTTP_400_BAD_REQUEST)
+        if uploaded.size > MAX_AVATAR_BYTES:
+            return Response({'avatar': ['Image must be 5 MB or smaller.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = uploaded.read()
+        content_type = uploaded.content_type or ''
+        signature_matches = AVATAR_SIGNATURES.get(content_type)
+        if signature_matches is None or not signature_matches(data):
+            return Response(
+                {'avatar': ['Use a valid JPG, PNG, or WebP image.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        UserAvatar.objects.update_or_create(
+            user=request.user,
+            defaults={'data': data, 'content_type': content_type},
+        )
+        request.user.avatar_updated_at = timezone.now()
+        request.user.save(update_fields=['avatar_updated_at'])
+        return Response(UserSerializer(request.user, context={'request': request}).data)
+
+    def delete(self, request):
+        UserAvatar.objects.filter(user=request.user).delete()
+        request.user.avatar_updated_at = None
+        request.user.save(update_fields=['avatar_updated_at'])
+        return Response(UserSerializer(request.user, context={'request': request}).data)
+
+
+class AvatarView(APIView):
+    """Public, cacheable image response used anywhere a user's avatar appears."""
+
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, user_id):
+        try:
+            avatar = UserAvatar.objects.only('data', 'content_type', 'updated_at').get(user_id=user_id)
+        except UserAvatar.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        response = HttpResponse(bytes(avatar.data), content_type=avatar.content_type)
+        response['Cache-Control'] = 'public, max-age=3600'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
 
 
 class ForgotPasswordView(APIView):

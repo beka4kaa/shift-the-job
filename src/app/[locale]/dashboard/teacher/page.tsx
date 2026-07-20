@@ -4,33 +4,22 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { ReviewCard, type ReviewCardData } from '@/components/ReviewCard';
 import {
-  LayoutDashboard,
   Calendar,
   Users,
   Star,
-  DollarSign,
-  Settings,
   TrendingUp,
   MessageSquare,
   CreditCard,
   Clock,
 } from 'lucide-react';
 import Link from 'next/link';
+import { DashboardShell } from '@/components/DashboardShell';
 import {
   type DashboardBooking,
   isUpcoming,
   formatBookingDate,
   money,
 } from '@/lib/bookings';
-
-const sidebarItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/teacher', active: true },
-  { label: 'Schedule', icon: Calendar, href: '/dashboard/teacher/schedule', active: false },
-  { label: 'Students', icon: Users, href: '/dashboard/teacher/students', active: false },
-  { label: 'Reviews', icon: Star, href: '/dashboard/teacher/reviews', active: false },
-  { label: 'Earnings', icon: DollarSign, href: '/dashboard/teacher/earnings', active: false },
-  { label: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
-];
 
 interface TeacherProfile {
   id: number;
@@ -47,7 +36,7 @@ interface TeacherProfile {
   }[];
 }
 
-const DEFAULT_AVATAR = 'https://api.dicebear.com/9.x/avataaars/svg?seed=Student';
+const DEFAULT_AVATAR = '/default-avatar.svg';
 
 export default function TeacherDashboardPage() {
   const { data: session } = useSession();
@@ -86,7 +75,8 @@ export default function TeacherDashboardPage() {
     .reduce((s, b) => s + take(b), 0);
   const pending = bookings.filter((b) => b.status === 'PENDING').reduce((s, b) => s + take(b), 0);
 
-  const activeStudents = new Set(bookings.map((b) => b.student_name)).size;
+  const paidLessons = bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'COMPLETED');
+  const activeStudents = new Set(paidLessons.map((b) => b.student)).size;
   const upcoming = bookings.filter(isUpcoming);
 
   const reviews: ReviewCardData[] = (profile?.reviews ?? []).slice(0, 3).map((r) => ({
@@ -116,30 +106,7 @@ export default function TeacherDashboardPage() {
   const stat = (v: number | string) => (loading ? '—' : v);
 
   return (
-    <div className="flex min-h-screen pt-32 bg-[#f4f1e9] text-[#171813]">
-      {/* Sidebar */}
-      <aside className="w-64 min-h-screen p-6 border-r border-black/10 hidden md:block">
-        <nav className="flex flex-col gap-1">
-          {sidebarItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                  item.active ? 'bg-[#171813] text-white' : 'text-black/55 hover:bg-black/5 hover:text-black'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-8">
+    <DashboardShell role="teacher">
         <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
 
         {/* Earnings Overview */}
@@ -173,7 +140,7 @@ export default function TeacherDashboardPage() {
           </div>
           <div className="border-r border-b border-black/10 p-6 text-center">
             <Calendar className="w-6 h-6 text-black/45 mx-auto mb-2" />
-            <p className="text-2xl font-medium tracking-[-0.02em]">{stat(bookings.length)}</p>
+            <p className="text-2xl font-medium tracking-[-0.02em]">{stat(paidLessons.length)}</p>
             <p className="text-sm text-black/55">Total Lessons</p>
           </div>
           <div className="border-r border-b border-black/10 p-6 text-center">
@@ -284,7 +251,6 @@ export default function TeacherDashboardPage() {
             </button>
           </div>
         </div>
-      </main>
-    </div>
+    </DashboardShell>
   );
 }

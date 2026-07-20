@@ -20,6 +20,7 @@ export interface ProfileReview {
 
 export interface ProfileView {
   id: string;
+  userId: number;
   name: string;
   image: string;
   headline: string;
@@ -40,11 +41,12 @@ export interface ProfileView {
   source: 'db';
 }
 
-const DEFAULT_AVATAR = 'https://api.dicebear.com/9.x/avataaars/svg?seed=Student';
+const DEFAULT_AVATAR = '/default-avatar.svg';
 
 /** Shape of the JSON returned by Django's TeacherProfileSerializer. */
 export interface DjangoTeacherRow {
   id: number;
+  user_id: number;
   name: string;
   image: string | null;
   headline: string;
@@ -77,6 +79,7 @@ export function djangoTeacherToProfileView(row: DjangoTeacherRow): ProfileView {
 
   return {
     id: String(row.id),
+    userId: row.user_id,
     name: row.name,
     image: row.image ?? DEFAULT_AVATAR,
     headline: row.headline,
@@ -111,9 +114,8 @@ export async function getTeacherProfile(id: string): Promise<ProfileView | null>
   let res: Response;
   try {
     res = await fetch(`${DJANGO_API_URL}/api/teachers/${id}/`, {
-      // Teacher data changes infrequently enough that a short cache is fine,
-      // and avoids hammering the API on every profile-page request.
-      next: { revalidate: 60 },
+      // Profile edits and avatar uploads should be visible immediately.
+      cache: 'no-store',
     });
   } catch {
     // Django backend unreachable — no data to show.
@@ -134,7 +136,7 @@ export async function getTeacherProfile(id: string): Promise<ProfileView | null>
 export async function getTeacherList(): Promise<ProfileView[]> {
   try {
     const res = await fetch(`${DJANGO_API_URL}/api/teachers/`, {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
     if (!res.ok) return [];
     const rows: DjangoTeacherRow[] = await res.json();

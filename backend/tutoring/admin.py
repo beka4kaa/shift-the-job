@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from .models import (
     Booking,
+    Favorite,
+    Message,
     Review,
     Subject,
     TeacherAvailability,
@@ -61,3 +63,13 @@ class BookingAdmin(admin.ModelAdmin):
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
     list_display = ['id', 'student', 'teacher', 'rating', 'created_at']
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = ['user', 'teacher', 'created_at']
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ['sender', 'recipient', 'created_at', 'read_at']

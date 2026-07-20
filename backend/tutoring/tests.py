@@ -5,6 +5,8 @@ from rest_framework.test import APITestCase
 from accounts.models import User
 from .models import (
     Booking,
+    Favorite,
+    Message,
     Review,
     TeacherAvailability,
     TeacherCertificate,
@@ -135,7 +137,7 @@ class BookingAPITests(APITestCase):
         })
         self.assertEqual(res.status_code, 401)
 
-    def test_create_computes_price_and_platform_fee_from_hourly_rate(self):
+    def test_direct_creation_is_rejected_so_payment_cannot_be_bypassed(self):
         teacher = make_teacher(hourly_rate=30.0)
         student = User.objects.create_user(email='student@example.com', name='Student', password='pw123456')
         self.client.force_authenticate(user=student)
@@ -143,23 +145,8 @@ class BookingAPITests(APITestCase):
         res = self.client.post('/api/bookings/', {
             'teacher': teacher.id, 'subject': 'Mathematics', 'date': '2026-08-01T14:00:00Z', 'duration': 60,
         })
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(res.data['price'], 30.0)
-        self.assertAlmostEqual(res.data['platform_fee'], 4.5)
-        self.assertEqual(res.data['status'], 'PENDING')
-
-    def test_student_cannot_set_price_or_status_directly(self):
-        teacher = make_teacher(hourly_rate=30.0)
-        student = User.objects.create_user(email='student2@example.com', name='Student2', password='pw123456')
-        self.client.force_authenticate(user=student)
-
-        res = self.client.post('/api/bookings/', {
-            'teacher': teacher.id, 'subject': 'Mathematics', 'date': '2026-08-01T14:00:00Z',
-            'duration': 60, 'price': 0.01, 'status': 'COMPLETED',
-        })
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(res.data['price'], 30.0)
-        self.assertEqual(res.data['status'], 'PENDING')
+        self.assertEqual(res.status_code, 405)
+        self.assertEqual(Booking.objects.count(), 0)
 
     def test_list_only_returns_the_requesting_students_own_bookings(self):
         teacher = make_teacher()
@@ -208,16 +195,20 @@ class BookingAPITests(APITestCase):
 
 
 class MyTeacherProfileStatsTests(APITestCase):
-    def test_me_endpoint_exposes_readonly_stats_and_reviews(self):
+    def test_me_endpoint_calculates_stats_from_real_reviews_and_bookings(self):
         teacher = make_teacher(email='st@example.com', rating=4.8, review_count=3, total_students=12)
         student = User.objects.create_user(email='sts@example.com', name='Rev', password='pw123456')
         Review.objects.create(student=student, teacher=teacher, rating=5, comment='Great tutor')
+        Booking.objects.create(
+            student=student, teacher=teacher, subject='Mathematics', date='2026-08-01T14:00:00Z',
+            duration=60, price=25, platform_fee=3.75, currency='USD', status=Booking.Status.CONFIRMED,
+        )
         self.client.force_authenticate(user=teacher.user)
         res = self.client.get('/api/teachers/me/')
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data['rating'], 4.8)
-        self.assertEqual(res.data['review_count'], 3)
-        self.assertEqual(res.data['total_students'], 12)
+        self.assertEqual(res.data['rating'], 5.0)
+        self.assertEqual(res.data['review_count'], 1)
+        self.assertEqual(res.data['total_students'], 1)
         self.assertEqual(len(res.data['reviews']), 1)
         self.assertEqual(res.data['reviews'][0]['comment'], 'Great tutor')
 
@@ -251,6 +242,145 @@ class ReviewAPITests(APITestCase):
         self.assertEqual(res.data[0]['comment'], 'A')
 
 
+class FavoriteAPITests(APITestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(email='fav@example.com', name='Fav', password='pw123456')
+        self.teacher = make_teacher(email='fav-teacher@example.com')
+        self.client.force_authenticate(user=self.student)
+
+    def test_create_and_list_favorite(self):
+        created = self.client.post('/api/favorites/', {'teacher_id': self.teacher.id}, format='json')
+        listed = self.client.get('/api/favorites/')
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(len(listed.data), 1)
+        self.assertEqual(listed.data[0]['teacher']['id'], self.teacher.id)
+
+    def test_duplicate_favorite_is_rejected(self):
+        Favorite.objects.create(user=self.student, teacher=self.teacher)
+        res = self.client.post('/api/favorites/', {'teacher_id': self.teacher.id}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_user_cannot_delete_another_users_favorite(self):
+        other = User.objects.create_user(email='other-fav@example.com', name='Other', password='pw123456')
+        favorite = Favorite.objects.create(user=other, teacher=self.teacher)
+        res = self.client.delete(f'/api/favorites/{favorite.id}/')
+        self.assertEqual(res.status_code, 404)
+
+    def test_teacher_accounts_cannot_favorite_tutors(self):
+        self.client.force_authenticate(user=self.teacher.user)
+        res = self.client.post('/api/favorites/', {'teacher_id': self.teacher.id}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+
+class MessageAPITests(APITestCase):
+    def setUp(self):
+        self.sender = User.objects.create_user(email='sender@example.com', name='Sender', password='pw123456')
+        self.recipient = User.objects.create_user(email='recipient@example.com', name='Recipient', password='pw123456')
+        self.client.force_authenticate(user=self.sender)
+
+    def test_send_and_list_message(self):
+        sent = self.client.post('/api/messages/', {'recipient': self.recipient.id, 'body': 'Hello'}, format='json')
+        listed = self.client.get('/api/messages/')
+        self.assertEqual(sent.status_code, 201)
+        self.assertEqual(len(listed.data), 1)
+        self.assertEqual(listed.data[0]['body'], 'Hello')
+
+    def test_messages_are_private_to_participants(self):
+        outsider = User.objects.create_user(email='outsider@example.com', name='Out', password='pw123456')
+        Message.objects.create(sender=self.recipient, recipient=outsider, body='Private')
+        self.assertEqual(len(self.client.get('/api/messages/').data), 0)
+
+    def test_conversation_filter_marks_incoming_messages_read(self):
+        message = Message.objects.create(sender=self.recipient, recipient=self.sender, body='Hi')
+        res = self.client.get(f'/api/messages/?with={self.recipient.id}')
+        self.assertEqual(len(res.data), 1)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.read_at)
+
+    def test_cannot_message_self(self):
+        res = self.client.post('/api/messages/', {'recipient': self.sender.id, 'body': 'Nope'}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+
+class AdminPanelAPITests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email='panel-admin@example.com', name='Panel Admin', password='pw123456',
+            role=User.Role.ADMIN, is_staff=True,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_admin_endpoints_reject_non_admin_users(self):
+        student = User.objects.create_user(email='not-admin@example.com', name='No', password='pw123456')
+        self.client.force_authenticate(user=student)
+        self.assertEqual(self.client.get('/api/admin/summary/').status_code, 403)
+        self.assertEqual(self.client.get('/api/admin/users/').status_code, 403)
+        self.assertEqual(self.client.post('/api/admin/teachers/', {}, format='json').status_code, 403)
+
+    def test_summary_returns_real_metrics_and_twelve_month_trend(self):
+        teacher = make_teacher(email='summary-teacher@example.com')
+        student = User.objects.create_user(email='summary-student@example.com', name='Student', password='pw123456')
+        Booking.objects.create(
+            student=student, teacher=teacher, subject='Math', date='2026-08-01T14:00:00Z', duration=60,
+            price=100, platform_fee=15, currency='USD', status=Booking.Status.CONFIRMED,
+        )
+        res = self.client.get('/api/admin/summary/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['metrics']['gross_revenue'], 100)
+        self.assertEqual(res.data['metrics']['platform_revenue'], 15)
+        self.assertEqual(res.data['metrics']['teacher_earnings'], 85)
+        self.assertEqual(len(res.data['trend']), 12)
+
+    def test_admin_can_create_and_edit_a_teacher(self):
+        created = self.client.post('/api/admin/teachers/', {
+            'email': 'created-teacher@example.com', 'name': 'Created Teacher', 'password': 'teacher-pass-123',
+            'headline': 'Physics mentor', 'bio': 'Helpful', 'hourly_rate': 40, 'currency': 'USD',
+            'experience': 5, 'country': 'Kazakhstan', 'city': 'Astana', 'verified': True,
+            'subjects': ['Physics', 'Physics', 'Math'], 'languages': ['English', 'Russian'],
+            'availability': ['Mon', 'Wed'],
+        }, format='json')
+        self.assertEqual(created.status_code, 201)
+        teacher_id = created.data['id']
+        self.assertEqual(created.data['subjects'], ['Physics', 'Math'])
+        self.assertTrue(created.data['verified'])
+        user = User.objects.get(email='created-teacher@example.com')
+        self.assertEqual(user.role, User.Role.TEACHER)
+        self.assertTrue(user.check_password('teacher-pass-123'))
+
+        updated = self.client.patch(f'/api/admin/teachers/{teacher_id}/', {
+            'headline': 'Senior physics mentor', 'featured': True,
+            'subjects': ['Physics'], 'availability': ['Fri'],
+        }, format='json')
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data['headline'], 'Senior physics mentor')
+        self.assertEqual(updated.data['subjects'], ['Physics'])
+        self.assertEqual(updated.data['availability'], ['Fri'])
+        self.assertTrue(updated.data['featured'])
+
+    def test_admin_can_update_booking_operations_fields(self):
+        teacher = make_teacher(email='ops-teacher@example.com')
+        student = User.objects.create_user(email='ops-student@example.com', name='Student', password='pw123456')
+        booking = Booking.objects.create(
+            student=student, teacher=teacher, subject='Math', date='2026-08-01T14:00:00Z', duration=60,
+            price=25, platform_fee=3.75, currency='USD', status=Booking.Status.PENDING,
+        )
+        res = self.client.patch(f'/api/admin/bookings/{booking.id}/', {
+            'status': 'CONFIRMED', 'meeting_link': 'https://meet.example.com/lesson',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CONFIRMED)
+        self.assertEqual(booking.meeting_link, 'https://meet.example.com/lesson')
+
+    def test_admin_can_moderate_reviews(self):
+        teacher = make_teacher(email='review-admin-teacher@example.com')
+        student = User.objects.create_user(email='review-admin-student@example.com', name='Student', password='pw123456')
+        review = Review.objects.create(student=student, teacher=teacher, rating=1, comment='Remove me')
+        res = self.client.delete(f'/api/admin/reviews/{review.id}/')
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(Review.objects.filter(pk=review.id).exists())
+
+
 class StripeCheckoutAPITests(APITestCase):
     def test_requires_authentication(self):
         teacher = make_teacher()
@@ -280,6 +410,7 @@ class StripeCheckoutAPITests(APITestCase):
     def test_creates_a_pending_booking_with_computed_price(self, mock_create):
         mock_create.return_value = MagicMock(url='https://checkout.stripe.com/fake-session')
         teacher = make_teacher(hourly_rate=30.0)
+        TeacherSubject.objects.create(teacher_profile=teacher, name='Mathematics')
         student = User.objects.create_user(email='s3@example.com', name='S3', password='pw123456')
         self.client.force_authenticate(user=student)
 
@@ -295,20 +426,38 @@ class StripeCheckoutAPITests(APITestCase):
         self.assertEqual(booking.status, Booking.Status.PENDING)
 
     @patch('tutoring.stripe_views.stripe.checkout.Session.create')
-    def test_stripe_error_returns_500_but_booking_already_created(self, mock_create):
+    def test_stripe_error_removes_the_unpaid_booking(self, mock_create):
         mock_create.side_effect = Exception('stripe boom')
         teacher = make_teacher()
+        TeacherSubject.objects.create(teacher_profile=teacher, name='Mathematics')
         student = User.objects.create_user(email='s4@example.com', name='S4', password='pw123456')
         self.client.force_authenticate(user=student)
 
         res = self.client.post('/api/stripe/checkout/', {
             'teacherId': teacher.id, 'subject': 'Mathematics', 'date': '2026-08-01T14:00:00Z', 'duration': 60,
         }, format='json')
-        self.assertEqual(res.status_code, 500)
-        # Matches the original Next.js behavior: the booking row is created
-        # before the Stripe call, so a failed Stripe call still leaves a
-        # PENDING booking behind rather than rolling it back.
-        self.assertEqual(Booking.objects.filter(student=student).count(), 1)
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(Booking.objects.filter(student=student).count(), 0)
+
+    def test_rejects_a_subject_the_tutor_does_not_offer(self):
+        teacher = make_teacher()
+        TeacherSubject.objects.create(teacher_profile=teacher, name='Mathematics')
+        student = User.objects.create_user(email='s5@example.com', name='S5', password='pw123456')
+        self.client.force_authenticate(user=student)
+        res = self.client.post('/api/stripe/checkout/', {
+            'teacherId': teacher.id, 'subject': 'Physics', 'date': '2026-08-01T14:00:00Z', 'duration': 60,
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Booking.objects.count(), 0)
+
+    def test_teacher_accounts_cannot_book_lessons(self):
+        teacher = make_teacher()
+        TeacherSubject.objects.create(teacher_profile=teacher, name='Mathematics')
+        self.client.force_authenticate(user=teacher.user)
+        res = self.client.post('/api/stripe/checkout/', {
+            'teacherId': teacher.id, 'subject': 'Mathematics', 'date': '2026-08-01T14:00:00Z', 'duration': 60,
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
 
 
 class StripeConnectAPITests(APITestCase):
@@ -394,3 +543,23 @@ class StripeWebhookAPITests(APITestCase):
             HTTP_STRIPE_SIGNATURE='valid',
         )
         self.assertEqual(res.status_code, 200)
+
+    @patch('tutoring.stripe_views.stripe.Webhook.construct_event')
+    def test_expired_checkout_cancels_pending_booking(self, mock_construct_event):
+        teacher = make_teacher(email='expired-teacher@example.com')
+        student = User.objects.create_user(email='expired@example.com', name='Expired', password='pw123456')
+        booking = Booking.objects.create(
+            student=student, teacher=teacher, subject='Mathematics', date='2026-08-01T14:00:00Z',
+            duration=60, price=25, platform_fee=3.75, currency='USD', status=Booking.Status.PENDING,
+        )
+        mock_construct_event.return_value = {
+            'type': 'checkout.session.expired',
+            'data': {'object': {'metadata': {'bookingId': str(booking.id)}}},
+        }
+        res = self.client.post(
+            '/api/stripe/webhook/', data='{}', content_type='application/json',
+            HTTP_STRIPE_SIGNATURE='valid',
+        )
+        self.assertEqual(res.status_code, 200)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CANCELLED)

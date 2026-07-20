@@ -1,6 +1,7 @@
 /** Shape of a booking row from Django's BookingSerializer. */
 export interface DashboardBooking {
   id: number;
+  student: number;
   teacher: number;
   teacher_name: string;
   teacher_image: string | null;
@@ -12,18 +13,17 @@ export interface DashboardBooking {
   price: number;
   currency: string;
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+  meeting_link: string | null;
 }
 
 /** A lesson still to happen (booked/paid, in the future). */
 export function isUpcoming(b: DashboardBooking): boolean {
-  const active = b.status === 'PENDING' || b.status === 'CONFIRMED';
-  return active && new Date(b.date).getTime() >= Date.now();
+  return b.status === 'CONFIRMED' && new Date(b.date).getTime() >= Date.now();
 }
 
 /** A lesson already done (explicitly completed, or its time has passed). */
 export function isPast(b: DashboardBooking): boolean {
-  if (b.status === 'CANCELLED' || b.status === 'REFUNDED') return false;
-  return b.status === 'COMPLETED' || new Date(b.date).getTime() < Date.now();
+  return b.status === 'COMPLETED' || (b.status === 'CONFIRMED' && new Date(b.date).getTime() < Date.now());
 }
 
 export function formatBookingDate(iso: string): { date: string; time: string } {

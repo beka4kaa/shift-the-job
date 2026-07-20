@@ -14,7 +14,30 @@ const PRICE_RANGES = [
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export function SearchFilters() {
+export interface AppliedTeacherFilters {
+  subjects: string[];
+  minPrice: number;
+  maxPrice: number | null;
+  rating: number;
+  languages: string[];
+  days: string[];
+}
+
+export const EMPTY_TEACHER_FILTERS: AppliedTeacherFilters = {
+  subjects: [], minPrice: 0, maxPrice: null, rating: 0, languages: [], days: [],
+};
+
+export interface TeacherFilterOption { id: string; name: string; icon?: string; count: number }
+
+export function SearchFilters({
+  onApply,
+  subjects = SUBJECTS,
+  languages = LANGUAGES,
+}: {
+  onApply: (filters: AppliedTeacherFilters) => void;
+  subjects?: TeacherFilterOption[];
+  languages?: string[];
+}) {
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedPriceRange, setSelectedPriceRange] = useState(0);
   const [selectedRating, setSelectedRating] = useState(0);
@@ -45,6 +68,19 @@ export function SearchFilters() {
     setSelectedRating(0);
     setSelectedLanguages([]);
     setSelectedDays([]);
+    onApply(EMPTY_TEACHER_FILTERS);
+  };
+
+  const applyFilters = () => {
+    const price = PRICE_RANGES[selectedPriceRange];
+    onApply({
+      subjects: selectedSubjects.map((id) => subjects.find((subject) => subject.id === id)?.name).filter((name): name is string => Boolean(name)),
+      minPrice: price.min,
+      maxPrice: Number.isFinite(price.max) ? price.max : null,
+      rating: selectedRating,
+      languages: selectedLanguages,
+      days: selectedDays,
+    });
   };
 
   const activeFiltersCount =
@@ -55,7 +91,7 @@ export function SearchFilters() {
     selectedDays.length;
 
   return (
-    <aside className="border border-black/10 p-5 space-y-6">
+    <div className="space-y-6 border border-black/10 p-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-base font-medium tracking-[-0.02em] text-[#171813]">Filters</h2>
@@ -70,7 +106,7 @@ export function SearchFilters() {
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-black/40 mb-3">Subject</h3>
         <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-          {SUBJECTS.map((subject) => (
+          {subjects.map((subject) => (
             <label
               key={subject.id}
               className="flex items-center gap-2.5 cursor-pointer group"
@@ -82,7 +118,7 @@ export function SearchFilters() {
                 className="h-4 w-4 border-black/20 text-[#171813] focus:ring-1 focus:ring-[#91a838] focus:ring-offset-0 cursor-pointer"
               />
               <span className="flex items-center gap-1.5 text-sm text-black/60 group-hover:text-black transition-colors">
-                <span>{subject.icon}</span>
+                {subject.icon && <span>{subject.icon}</span>}
                 <span>{subject.name}</span>
               </span>
               <span className="ml-auto text-[11px] text-black/35">{subject.count}</span>
@@ -127,6 +163,7 @@ export function SearchFilters() {
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((rating) => (
             <button
+              type="button"
               key={rating}
               onClick={() =>
                 setSelectedRating(selectedRating === rating ? 0 : rating)
@@ -156,7 +193,7 @@ export function SearchFilters() {
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-black/40 mb-3">Language</h3>
         <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-          {LANGUAGES.map((lang) => (
+          {languages.map((lang) => (
             <label
               key={lang}
               className="flex items-center gap-2.5 cursor-pointer group"
@@ -184,6 +221,7 @@ export function SearchFilters() {
         <div className="flex flex-wrap gap-2">
           {DAYS.map((day) => (
             <button
+              type="button"
               key={day}
               onClick={() => toggleDay(day)}
               className={`px-3 py-1.5 text-xs font-medium transition-colors border ${
@@ -203,10 +241,11 @@ export function SearchFilters() {
 
       {/* Action buttons */}
       <div className="flex flex-col gap-2">
-        <button className="w-full bg-[#171813] hover:bg-[#91a838] text-sm font-semibold text-white hover:text-black py-2.5 transition-colors">
+        <button type="button" onClick={applyFilters} className="w-full bg-[#171813] hover:bg-[#91a838] text-sm font-semibold text-white hover:text-black py-2.5 transition-colors">
           Apply Filters
         </button>
         <button
+          type="button"
           onClick={resetFilters}
           className="w-full flex items-center justify-center gap-1.5 border border-black/15 text-sm text-black/55 hover:text-black hover:border-black/30 py-2.5 transition-colors"
         >
@@ -214,6 +253,6 @@ export function SearchFilters() {
           Reset All
         </button>
       </div>
-    </aside>
+    </div>
   );
 }

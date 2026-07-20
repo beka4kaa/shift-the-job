@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Camera } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { DashboardShell } from '@/components/DashboardShell';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DEFAULT_AVATAR = '/default-avatar.svg';
 
 interface Account {
   email: string;
@@ -30,6 +34,7 @@ const inputClass =
 const labelClass = 'block text-sm font-medium text-black/60 mb-1';
 
 export default function SettingsPage() {
+  const { update: updateSession } = useSession();
   const [account, setAccount] = useState<Account | null>(null);
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +43,8 @@ export default function SettingsPage() {
   const [teacherMsg, setTeacherMsg] = useState('');
   const [savingAccount, setSavingAccount] = useState(false);
   const [savingTeacher, setSavingTeacher] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +64,50 @@ export default function SettingsPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
+
+  const chooseAvatar = async (file?: File) => {
+    setAccountMsg('');
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAccountMsg('Use a JPG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAccountMsg('Image must be 5 MB or smaller.');
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setAvatarPreview(preview);
+    setAvatarUploading(true);
+
+    const formData = new FormData();
+    formData.set('avatar', file);
+    try {
+      const response = await fetch('/api/profile/avatar', { method: 'POST', body: formData });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null) as { avatar?: string[] } | null;
+        setAccountMsg(error?.avatar?.[0] || 'Could not upload this image.');
+        setAvatarPreview(null);
+        return;
+      }
+      const updatedAccount: Account = await response.json();
+      setAccount(updatedAccount);
+      await updateSession({ user: { name: updatedAccount.name, image: updatedAccount.image } });
+      setAvatarPreview(null);
+      setAccountMsg('Photo updated');
+    } catch {
+      setAvatarPreview(null);
+      setAccountMsg('Could not upload this image. Please try again.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   const saveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) return;
@@ -65,9 +116,18 @@ export default function SettingsPage() {
     const res = await fetch('/api/profile/account', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: account.name, image: account.image || null }),
+      body: JSON.stringify({ name: account.name }),
     });
-    setAccountMsg(res.ok ? 'Saved' : 'Could not save — check your input.');
+    if (!res.ok) {
+      setAccountMsg('Could not save — check your input.');
+      setSavingAccount(false);
+      return;
+    }
+
+    const updatedAccount: Account = await res.json();
+    setAccount(updatedAccount);
+    await updateSession({ user: { name: updatedAccount.name, image: updatedAccount.image } });
+    setAccountMsg('Saved');
     setSavingAccount(false);
   };
 
@@ -118,8 +178,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f1e9] text-[#171813] px-5 sm:px-8 pt-32 pb-16">
-      <div className="max-w-2xl mx-auto">
+    <DashboardShell>
+      <div className="mx-auto max-w-2xl pb-16">
         <h1 className="text-3xl font-medium tracking-[-0.03em] mb-2">Settings</h1>
         <p className="text-black/55 mb-10">Manage your account and public profile.</p>
 
@@ -128,17 +188,35 @@ export default function SettingsPage() {
           <h2 className="text-xl font-medium tracking-[-0.02em] mb-6">Account</h2>
 
           <div className="flex items-center gap-4 mb-6">
-            {account.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={account.image} alt={account.name} className="w-16 h-16 object-cover border border-black/10" />
-            ) : (
-              <div className="w-16 h-16 border border-black/10 flex items-center justify-center text-2xl font-medium text-black/40">
-                {account.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="text-sm text-black/55">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={avatarPreview || account.image || DEFAULT_AVATAR}
+              alt={account.name}
+              className="w-20 h-20 object-cover border border-black/10"
+              onError={(event) => {
+                if (!event.currentTarget.src.endsWith(DEFAULT_AVATAR)) {
+                  event.currentTarget.src = DEFAULT_AVATAR;
+                }
+              }}
+            />
+            <div className="text-sm text-black/55 flex-1">
               <p className="font-medium text-black/70">{account.email}</p>
               <p className="uppercase tracking-[0.14em] text-xs mt-1">{account.role}</p>
+              <label className={`mt-3 inline-flex items-center gap-2 border border-black/15 px-3 py-2 text-xs font-semibold transition-colors ${avatarUploading ? 'cursor-wait opacity-50' : 'cursor-pointer text-black hover:bg-black hover:text-white'}`}>
+                <Camera className="h-3.5 w-3.5" />
+                {avatarUploading ? 'Uploading…' : 'Choose photo'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  disabled={avatarUploading}
+                  onChange={(event) => {
+                    void chooseAvatar(event.target.files?.[0]);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+              <p className="mt-2 text-xs text-black/35">JPG, PNG or WebP · up to 5 MB</p>
             </div>
           </div>
 
@@ -150,16 +228,6 @@ export default function SettingsPage() {
                 value={account.name}
                 onChange={(e) => setAccount({ ...account, name: e.target.value })}
                 required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Avatar URL</label>
-              <input
-                className={inputClass}
-                type="url"
-                placeholder="https://…"
-                value={account.image || ''}
-                onChange={(e) => setAccount({ ...account, image: e.target.value })}
               />
             </div>
           </div>
@@ -321,6 +389,6 @@ export default function SettingsPage() {
           </form>
         )}
       </div>
-    </div>
+    </DashboardShell>
   );
 }

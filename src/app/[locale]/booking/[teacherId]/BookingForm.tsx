@@ -20,6 +20,12 @@ export function BookingForm({ teacher }: BookingFormProps) {
     setLoading(true);
     setError('');
 
+    if (new Date(date).getTime() <= Date.now()) {
+      setError('Choose a future date and time.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
@@ -27,13 +33,14 @@ export function BookingForm({ teacher }: BookingFormProps) {
         body: JSON.stringify({
           teacherId: teacher.id,
           subject,
-          date,
+          date: new Date(date).toISOString(),
           duration,
         }),
       });
 
       if (!res.ok) {
-        throw new Error('Booking failed. Please ensure you are logged in.');
+        const message = await res.json().catch(() => null) as string | { detail?: string } | null;
+        throw new Error(typeof message === 'string' ? message : message?.detail || 'Booking failed. Please ensure you are logged in.');
       }
 
       const { url } = await res.json();
@@ -128,10 +135,10 @@ export function BookingForm({ teacher }: BookingFormProps) {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || teacher.subjects.length === 0 || teacher.hourlyRate <= 0}
                 className="w-full py-4 bg-[#171813] text-white font-semibold text-lg hover:bg-[#91a838] hover:text-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing…' : 'Proceed to Payment'}
+                {loading ? 'Processing…' : teacher.hourlyRate <= 0 ? 'Booking unavailable' : 'Proceed to Payment'}
               </button>
             </div>
           </form>

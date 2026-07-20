@@ -42,6 +42,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
     image = models.URLField(blank=True, null=True)
+    avatar_updated_at = models.DateTimeField(null=True, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -54,6 +55,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class UserAvatar(models.Model):
+    """Uploaded avatar bytes live outside the User row so ordinary user and
+    teacher queries never pull binary data from PostgreSQL unnecessarily."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='avatar_file')
+    data = models.BinaryField()
+    content_type = models.CharField(max_length=50)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Avatar for {self.user.email}'
 
 
 class PasswordResetToken(models.Model):

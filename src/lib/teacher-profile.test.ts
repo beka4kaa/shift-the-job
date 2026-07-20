@@ -7,6 +7,7 @@ import {
 function buildRow(overrides: Partial<DjangoTeacherRow> = {}): DjangoTeacherRow {
   return {
     id: 1,
+    user_id: 2,
     name: 'Aigerim',
     image: null,
     headline: 'Math Tutor',
@@ -42,7 +43,7 @@ describe('djangoTeacherToProfileView', () => {
 
   it('falls back to a default avatar when image is null', () => {
     const view = djangoTeacherToProfileView(buildRow({ image: null }));
-    expect(view.image).toContain('dicebear');
+    expect(view.image).toBe('/default-avatar.svg');
   });
 
   it('passes subjects, languages, and availability through as plain string arrays', () => {
@@ -76,6 +77,6 @@ describe('djangoTeacherToProfileView', () => {
       studentName: 'Sam',
       subject: 'Mathematics',
     });
-    expect(view.reviews[0].studentImage).toContain('dicebear');
+    expect(view.reviews[0].studentImage).toBe('/default-avatar.svg');
   });
 });

@@ -1,17 +1,10 @@
 import { resolveTeacherProfile } from '@/lib/teacher-profile';
 import { getCountryFlag } from '@/lib/utils';
-import { Star, MapPin, Clock, Users, Award, MessageCircle, ArrowRight } from 'lucide-react';
+import { Star, MapPin, Clock, Users, Award } from 'lucide-react';
 import { ReviewCard } from '@/components/ReviewCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import Link from 'next/link';
-
-const ratingBreakdown = [
-  { stars: 5, percentage: 78 },
-  { stars: 4, percentage: 15 },
-  { stars: 3, percentage: 5 },
-  { stars: 2, percentage: 1 },
-  { stars: 1, percentage: 1 },
-];
+import { TutorActions } from '@/components/TutorActions';
 
 const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -40,6 +33,12 @@ export default async function TeacherProfilePage({
   }
 
   const teacherReviews = teacher.reviews;
+  const ratingBreakdown = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    percentage: teacherReviews.length === 0
+      ? 0
+      : Math.round((teacherReviews.filter((review) => review.rating === stars).length / teacherReviews.length) * 100),
+  }));
 
   return (
     <div className="min-h-screen bg-[#f4f1e9] text-[#171813]">
@@ -184,20 +183,7 @@ export default async function TeacherProfilePage({
                 <span>Replies within 1 hour</span>
               </div>
 
-              {/* Book Button */}
-              <Link
-                href={`/booking/${teacher.id}`}
-                className="group w-full flex items-center justify-center gap-2 bg-[#171813] px-6 py-3 text-sm font-semibold text-white hover:bg-[#91a838] hover:text-black transition-colors"
-              >
-                Book a Lesson
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-
-              {/* Message Button */}
-              <button className="w-full py-3 border border-black/15 text-black/70 hover:border-black/30 hover:text-black transition-colors mt-3 flex items-center justify-center gap-2">
-                <MessageCircle className="w-4 h-4" />
-                Message
-              </button>
+              <TutorActions teacherId={teacher.id} teacherUserId={teacher.userId} teacherName={teacher.name} />
 
               {/* Divider */}
               <div className="border-t border-black/10 my-4" />

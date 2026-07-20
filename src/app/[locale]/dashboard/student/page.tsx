@@ -2,17 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import {
-  Calendar,
-  CheckCircle,
-  Wallet,
-  Clock,
-  MessageCircle,
-  Settings,
-  Heart,
-  LayoutDashboard,
-} from 'lucide-react';
+import { Calendar, CheckCircle, Wallet, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { DashboardShell } from '@/components/DashboardShell';
 import {
   type DashboardBooking,
   isUpcoming,
@@ -20,14 +12,6 @@ import {
   formatBookingDate,
   money,
 } from '@/lib/bookings';
-
-const sidebarItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/student', active: true },
-  { label: 'My Bookings', icon: Calendar, href: '/dashboard/student/bookings', active: false },
-  { label: 'Favorites', icon: Heart, href: '/dashboard/student/favorites', active: false },
-  { label: 'Messages', icon: MessageCircle, href: '/dashboard/student/messages', active: false },
-  { label: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
-];
 
 function BookingCard({ booking, kind }: { booking: DashboardBooking; kind: 'upcoming' | 'past' }) {
   const { date, time } = formatBookingDate(booking.date);
@@ -92,30 +76,7 @@ export default function StudentDashboardPage() {
     .reduce((sum, b) => sum + b.price, 0);
 
   return (
-    <div className="flex min-h-screen pt-32 bg-[#f4f1e9] text-[#171813]">
-      {/* Sidebar */}
-      <aside className="w-64 min-h-screen p-6 border-r border-black/10 hidden md:block">
-        <nav className="flex flex-col gap-1">
-          {sidebarItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                  item.active ? 'bg-[#171813] text-white' : 'text-black/55 hover:bg-black/5 hover:text-black'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-8">
+    <DashboardShell role="student">
         <h1 className="text-2xl font-medium tracking-[-0.02em] mb-6">Welcome back, {firstName}! 👋</h1>
 
         {/* Stats Row */}
@@ -185,7 +146,6 @@ export default function StudentDashboardPage() {
             Find a Tutor
           </Link>
         </div>
-      </main>
-    </div>
+    </DashboardShell>
   );
 }

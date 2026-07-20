@@ -8,6 +8,7 @@ import logging
 import stripe
 from django.conf import settings
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -15,6 +16,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import User
 from .models import Booking, TeacherProfile
 
 logger = logging.getLogger(__name__)
@@ -25,19 +27,33 @@ class StripeCheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        if request.user.role != User.Role.STUDENT:
+            return Response('Only student accounts can book lessons', status=status.HTTP_403_FORBIDDEN)
+
         teacher_id = request.data.get('teacherId')
         subject = request.data.get('subject')
         raw_date = request.data.get('date')
         duration = request.data.get('duration')
 
         parsed_date = parse_datetime(raw_date) if isinstance(raw_date, str) else None
-        if not subject or parsed_date is None or not isinstance(duration, (int, float)):
+        if not subject or parsed_date is None or duration not in (30, 60, 90):
             return Response('Missing or invalid booking details', status=status.HTTP_400_BAD_REQUEST)
+        if timezone.is_naive(parsed_date):
+            parsed_date = timezone.make_aware(parsed_date, timezone.get_current_timezone())
+        if parsed_date <= timezone.now():
+            return Response('Choose a future date and time', status=status.HTTP_400_BAD_REQUEST)
 
         try:
             teacher = TeacherProfile.objects.select_related('user').get(id=teacher_id)
         except (TeacherProfile.DoesNotExist, ValueError, TypeError):
             return Response('Teacher not found', status=status.HTTP_404_NOT_FOUND)
+
+        if teacher.user_id == request.user.id:
+            return Response('You cannot book yourself', status=status.HTTP_400_BAD_REQUEST)
+        if teacher.hourly_rate <= 0:
+            return Response('This tutor is not accepting bookings yet', status=status.HTTP_400_BAD_REQUEST)
+        if not teacher.subjects.filter(name=subject).exists():
+            return Response('Choose a subject offered by this tutor', status=status.HTTP_400_BAD_REQUEST)
 
         amount = (teacher.hourly_rate / 60) * duration
         platform_fee = amount * settings.PLATFORM_FEE
@@ -88,7 +104,10 @@ class StripeCheckoutView(APIView):
             return Response({'url': checkout_session.url})
         except Exception as e:
             logger.error('STRIPE_CHECKOUT_ERROR: %s', e)
-            return Response('Internal Error', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # A failed Stripe session must never leave a phantom unpaid lesson
+            # in either dashboard.
+            booking.delete()
+            return Response('Payment checkout is currently unavailable', status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
 class StripeConnectView(APIView):
@@ -149,6 +168,13 @@ class StripeWebhookView(APIView):
                 Booking.objects.filter(id=booking_id).update(
                     status=Booking.Status.CONFIRMED,
                     stripe_payment_id=session.get('payment_intent'),
+                )
+        elif event['type'] == 'checkout.session.expired':
+            session = event['data']['object']
+            booking_id = session.get('metadata', {}).get('bookingId')
+            if booking_id:
+                Booking.objects.filter(id=booking_id, status=Booking.Status.PENDING).update(
+                    status=Booking.Status.CANCELLED,
                 )
 
         return HttpResponse('OK', status=200)

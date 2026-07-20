@@ -1,7 +1,22 @@
+from django.conf import settings
+from django.urls import reverse
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
+
+
+def get_user_image_url(user, request=None):
+    """Prefer an upload, then Google/external photo, then the local default."""
+    if user.avatar_updated_at:
+        path = reverse('avatar', kwargs={'user_id': user.id})
+        # Microsecond precision prevents two quick consecutive uploads from
+        # reusing the same cache key and showing the previous image for an hour.
+        path = f'{path}?v={int(user.avatar_updated_at.timestamp() * 1_000_000)}'
+        return request.build_absolute_uri(path) if request else path
+    if user.image:
+        return user.image
+    return f"{settings.FRONTEND_URL.rstrip('/')}/default-avatar.svg"
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -11,6 +26,11 @@ class UserSerializer(serializers.ModelSerializer):
         # email is the login identifier and role is privilege-bearing, so both
         # stay read-only — only name/image are user-editable via PATCH /me/.
         read_only_fields = ['id', 'email', 'role', 'created_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['image'] = get_user_image_url(instance, self.context.get('request'))
+        return data
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -35,7 +55,7 @@ class LoginSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        data['user'] = UserSerializer(self.user).data
+        data['user'] = UserSerializer(self.user, context=self.context).data
         return data
 
 
