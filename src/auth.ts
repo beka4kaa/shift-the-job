@@ -93,6 +93,9 @@ async function refreshDjangoToken(token: JWT): Promise<JWT> {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Trust the deployment host (Vercel/proxied domains) so Auth.js resolves the
+  // correct callback/cookie URLs instead of throwing on an unexpected host.
+  trustHost: true,
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/auth/login',
