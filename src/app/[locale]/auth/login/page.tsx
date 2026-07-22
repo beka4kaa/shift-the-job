@@ -1,17 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { signIn, signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { GoogleButton } from '@/components/GoogleButton';
 
+/**
+ * Google sign-in can succeed with Google itself while still failing overall:
+ * after Google redirects back, the server exchanges the id_token with our
+ * Django backend (see src/auth.ts exchangeGoogleToken) to resolve the
+ * account's role. If that server-to-server call can't reach Django (e.g.
+ * DJANGO_API_URL isn't set on the host), the session ends up with a name/photo
+ * from Google but no role — proxy.ts then bounces any dashboard visit back
+ * here. None of this shows up in the browser's network tab, since it happens
+ * entirely on the server, so without this banner it looks like Google
+ * silently "rejects" the account.
+ */
+const GOOGLE_ERROR_MESSAGE =
+  "We couldn't finish signing you in with Google — our login service didn't respond. Please try again in a moment, or sign in with email and password.";
+
 export default function LoginPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Derived at render time (not stored in state) so the message shows the
+  // instant the broken session loads, with no extra render round-trip.
+  const displayedError = error || (session?.error === 'GoogleAuthError' ? GOOGLE_ERROR_MESSAGE : '');
+
+  useEffect(() => {
+    if (session?.error === 'GoogleAuthError') {
+      // Clear the broken half-signed-in session so a retry starts clean
+      // instead of the stale Google profile lingering in the header.
+      void signOut({ redirect: false });
+    }
+  }, [session?.error]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +67,9 @@ export default function LoginPage() {
           <p className="text-black/55 mt-2">Sign in to continue learning</p>
         </div>
 
-        {error && (
+        {displayedError && (
           <div className="border border-red-600/30 text-red-700 p-3 mb-6 text-sm text-center">
-            {error}
+            {displayedError}
           </div>
         )}
 
