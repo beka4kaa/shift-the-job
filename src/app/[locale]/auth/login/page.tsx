@@ -7,18 +7,19 @@ import Link from 'next/link';
 import { GoogleButton } from '@/components/GoogleButton';
 
 /**
- * Google sign-in can succeed with Google itself while still failing overall:
- * after Google redirects back, the server exchanges the id_token with our
- * Django backend (see src/auth.ts exchangeGoogleToken) to resolve the
- * account's role. If that server-to-server call can't reach Django (e.g.
- * DJANGO_API_URL isn't set on the host), the session ends up with a name/photo
- * from Google but no role — proxy.ts then bounces any dashboard visit back
- * here. None of this shows up in the browser's network tab, since it happens
- * entirely on the server, so without this banner it looks like Google
- * silently "rejects" the account.
+ * Two session-level failures both trace back to the same Django auth bridge
+ * (see src/auth.ts): 'GoogleAuthError' when the initial Google id_token
+ * exchange fails, and 'RefreshTokenError' when the ~1hr Django access-token
+ * refresh fails for an already-signed-in user (Google OR password). Either
+ * way the session ends up with a name/photo but no usable role — proxy.ts
+ * then bounces any dashboard visit back here. None of this shows up in the
+ * browser's network tab (it's a server-to-server call), so without this
+ * banner it looks like the account is silently rejected or randomly logged
+ * out mid-session.
  */
-const GOOGLE_ERROR_MESSAGE =
-  "We couldn't finish signing you in with Google — our login service didn't respond. Please try again in a moment, or sign in with email and password.";
+const AUTH_BRIDGE_ERRORS = new Set(['GoogleAuthError', 'RefreshTokenError']);
+const AUTH_BRIDGE_ERROR_MESSAGE =
+  "Your session couldn't be verified — our login service didn't respond. Please sign in again in a moment.";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,17 +29,18 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const hasAuthBridgeError = Boolean(session?.error && AUTH_BRIDGE_ERRORS.has(session.error));
   // Derived at render time (not stored in state) so the message shows the
   // instant the broken session loads, with no extra render round-trip.
-  const displayedError = error || (session?.error === 'GoogleAuthError' ? GOOGLE_ERROR_MESSAGE : '');
+  const displayedError = error || (hasAuthBridgeError ? AUTH_BRIDGE_ERROR_MESSAGE : '');
 
   useEffect(() => {
-    if (session?.error === 'GoogleAuthError') {
+    if (hasAuthBridgeError) {
       // Clear the broken half-signed-in session so a retry starts clean
-      // instead of the stale Google profile lingering in the header.
+      // instead of the stale profile lingering in the header.
       void signOut({ redirect: false });
     }
-  }, [session?.error]);
+  }, [hasAuthBridgeError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

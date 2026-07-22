@@ -31,9 +31,15 @@ async function exchangeGoogleToken(idToken: string): Promise<DjangoLoginResponse
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id_token: idToken }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Logged (not swallowed) so a misconfigured DJANGO_API_URL or a Django-side
+      // rejection shows up in the host's server logs instead of failing silently.
+      console.error('GOOGLE_AUTH_BRIDGE_ERROR', DJANGO_API_URL, res.status, await res.text().catch(() => ''));
+      return null;
+    }
     return (await res.json()) as DjangoLoginResponse;
-  } catch {
+  } catch (err) {
+    console.error('GOOGLE_AUTH_BRIDGE_UNREACHABLE', DJANGO_API_URL, err);
     return null;
   }
 }
@@ -67,29 +73,38 @@ function getAccessTokenExpiry(accessToken: string): number {
  * session/app can decide to force a re-login.
  */
 async function refreshDjangoToken(token: JWT): Promise<JWT> {
+  // Logged on any failure (not swallowed) — this path fires ~1hr after any
+  // sign-in (Google or password) once the Django access token expires, so a
+  // broken DJANGO_API_URL here would otherwise silently lock every user out
+  // of gated pages with zero server-side trace.
+  let res: Response;
   try {
-    const res = await fetch(`${DJANGO_API_URL}/api/auth/login/refresh/`, {
+    res = await fetch(`${DJANGO_API_URL}/api/auth/login/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: token.djangoRefreshToken }),
     });
-
-    if (!res.ok) throw new Error(`refresh failed: ${res.status}`);
-
-    // ROTATE_REFRESH_TOKENS is off by default, so `refresh` usually isn't
-    // returned — keep the existing one when it isn't.
-    const data = (await res.json()) as { access: string; refresh?: string };
-
-    return {
-      ...token,
-      djangoAccessToken: data.access,
-      djangoRefreshToken: data.refresh ?? token.djangoRefreshToken,
-      accessTokenExpires: getAccessTokenExpiry(data.access),
-      error: undefined,
-    };
-  } catch {
+  } catch (err) {
+    console.error('DJANGO_TOKEN_REFRESH_UNREACHABLE', DJANGO_API_URL, err);
     return { ...token, error: 'RefreshTokenError' };
   }
+
+  if (!res.ok) {
+    console.error('DJANGO_TOKEN_REFRESH_ERROR', DJANGO_API_URL, res.status, await res.text().catch(() => ''));
+    return { ...token, error: 'RefreshTokenError' };
+  }
+
+  // ROTATE_REFRESH_TOKENS is off by default, so `refresh` usually isn't
+  // returned — keep the existing one when it isn't.
+  const data = (await res.json()) as { access: string; refresh?: string };
+
+  return {
+    ...token,
+    djangoAccessToken: data.access,
+    djangoRefreshToken: data.refresh ?? token.djangoRefreshToken,
+    accessTokenExpires: getAccessTokenExpiry(data.access),
+    error: undefined,
+  };
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -114,16 +129,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const res = await fetch(`${DJANGO_API_URL}/api/auth/login/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
-        });
+        let res: Response;
+        try {
+          res = await fetch(`${DJANGO_API_URL}/api/auth/login/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
+        } catch (err) {
+          // Logged so a broken DJANGO_API_URL shows up in server logs instead
+          // of surfacing to the user as a generic "invalid email or password".
+          console.error('CREDENTIALS_LOGIN_UNREACHABLE', DJANGO_API_URL, err);
+          return null;
+        }
 
         if (!res.ok) {
+          if (res.status !== 401) {
+            console.error('CREDENTIALS_LOGIN_ERROR', DJANGO_API_URL, res.status, await res.text().catch(() => ''));
+          }
           return null;
         }
 
