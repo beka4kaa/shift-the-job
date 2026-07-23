@@ -30,16 +30,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const hasAuthBridgeError = Boolean(session?.error && AUTH_BRIDGE_ERRORS.has(session.error));
-  // Derived at render time (not stored in state) so the message shows the
-  // instant the broken session loads, with no extra render round-trip.
   const displayedError = error || (hasAuthBridgeError ? AUTH_BRIDGE_ERROR_MESSAGE : '');
 
   useEffect(() => {
-    if (hasAuthBridgeError) {
-      // Clear the broken half-signed-in session so a retry starts clean
-      // instead of the stale profile lingering in the header.
-      void signOut({ redirect: false });
-    }
+    if (!hasAuthBridgeError) return;
+    let cancelled = false;
+    // Sign out the broken half-authenticated session so a retry starts clean,
+    // then lock the message into local state — signOut() clears session.error
+    // too, and without this the banner would vanish the instant it appears.
+    // setError runs after the await (a "callback", not the effect body itself)
+    // so this isn't the synchronous-setState-in-an-effect pattern to avoid.
+    void signOut({ redirect: false }).then(() => {
+      if (!cancelled) setError(AUTH_BRIDGE_ERROR_MESSAGE);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [hasAuthBridgeError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
